@@ -1,5 +1,8 @@
+ "use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import { useMemo, useState } from "react";
 
 type NavItem = {
   label: string;
@@ -117,6 +120,75 @@ function ConsultationRow(props: {
 }
 
 export default function DashboardPage() {
+  const consultations = [
+    {
+      id: "CONS-1031",
+      patient: "Niamh Walsh",
+      service: "Referral letter — orthopaedics",
+      type: "Referral",
+      status: "declined" as const,
+      submittedAt: "07:58",
+      submittedAtMinutes: 7 * 60 + 58,
+    },
+    {
+      id: "CONS-1038",
+      patient: "Seán O’Neill",
+      service: "Prescription renewal — asthma inhaler",
+      type: "Prescription",
+      status: "approved" as const,
+      submittedAt: "08:46",
+      submittedAtMinutes: 8 * 60 + 46,
+    },
+    {
+      id: "CONS-1042",
+      patient: "Aoife Murphy",
+      service: "Sick note — flu symptoms",
+      type: "Certificate",
+      status: "pending" as const,
+      submittedAt: "09:14",
+      submittedAtMinutes: 9 * 60 + 14,
+    },
+    {
+      id: "CONS-1044",
+      patient: "Cian Byrne",
+      service: "GP consultation — persistent cough",
+      type: "GP consult",
+      status: "pending" as const,
+      submittedAt: "09:02",
+      submittedAtMinutes: 9 * 60 + 2,
+    },
+  ];
+
+  const [queueStatus, setQueueStatus] = useState<
+    "awaiting_decision" | "all" | "pending" | "approved" | "declined"
+  >("awaiting_decision");
+  const [caseType, setCaseType] = useState<"all" | string>("all");
+  const [query, setQuery] = useState("");
+
+  const filteredConsultations = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    const desiredStatus =
+      queueStatus === "awaiting_decision"
+        ? "pending"
+        : queueStatus === "all"
+          ? null
+          : queueStatus;
+
+    return consultations
+      .filter((c) => {
+        if (desiredStatus && c.status !== desiredStatus) return false;
+        if (caseType !== "all" && c.type !== caseType) return false;
+        if (!normalizedQuery) return true;
+        return (
+          c.patient.toLowerCase().includes(normalizedQuery) ||
+          c.id.toLowerCase().includes(normalizedQuery) ||
+          c.service.toLowerCase().includes(normalizedQuery)
+        );
+      })
+      .slice()
+      .sort((a, b) => a.submittedAtMinutes - b.submittedAtMinutes); // oldest first
+  }, [caseType, consultations, query, queueStatus]);
+
   const navItems: NavItem[] = [
     { label: "Overview", href: "/dashboard" },
     { label: "Consultations", href: "/dashboard/consultations" },
@@ -189,11 +261,8 @@ export default function DashboardPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div className="hidden sm:block">
-                  <p className="text-sm font-semibold text-white">
-                    Doctor dashboard
-                  </p>
-                  <p className="text-xs text-white/60">
-                    Focused triage and consultation management
+                  <p className="text-lg font-semibold tracking-tight text-white">
+                    Doctor Dashboard
                   </p>
                 </div>
               </div>
@@ -261,11 +330,11 @@ export default function DashboardPage() {
                 <div className="rounded-2xl bg-white/5 p-5 ring-1 ring-white/10 lg:col-span-2">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <h2 className="text-base font-semibold text-slate-900">
+                    <h2 className="text-base font-semibold text-white">
                       Recent consultations
                     </h2>
-                    <p className="mt-1 text-sm text-slate-600">
-                      Quickly review what’s new and what needs attention.
+                    <p className="mt-1 text-sm text-white/60">
+                      Awaiting decision by default. Oldest items are shown first.
                     </p>
                   </div>
                   <Link
@@ -276,6 +345,67 @@ export default function DashboardPage() {
                   </Link>
                 </div>
 
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 ring-1 ring-white/10">
+                    <label className="text-xs font-medium text-white/70">
+                      Queue
+                    </label>
+                    <select
+                      value={queueStatus}
+                      onChange={(e) =>
+                        setQueueStatus(
+                          e.target.value as
+                            | "awaiting_decision"
+                            | "all"
+                            | "pending"
+                            | "approved"
+                            | "declined",
+                        )
+                      }
+                      className="bg-transparent text-sm text-white outline-none"
+                    >
+                      <option value="awaiting_decision">Awaiting decision</option>
+                      <option value="all">All cases</option>
+                      <option value="pending">Pending</option>
+                      <option value="approved">Approved</option>
+                      <option value="declined">Declined</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 ring-1 ring-white/10">
+                    <label className="text-xs font-medium text-white/70">
+                      Type
+                    </label>
+                    <select
+                      value={caseType}
+                      onChange={(e) => setCaseType(e.target.value)}
+                      className="bg-transparent text-sm text-white outline-none"
+                    >
+                      <option value="all">All</option>
+                      <option value="GP consult">GP consult</option>
+                      <option value="Prescription">Prescription</option>
+                      <option value="Certificate">Certificate</option>
+                      <option value="Referral">Referral</option>
+                    </select>
+                  </div>
+
+                  <div className="flex min-w-[220px] flex-1 items-center gap-2 rounded-xl bg-white/5 px-3 py-2 ring-1 ring-white/10">
+                    <label className="text-xs font-medium text-white/70">
+                      Search
+                    </label>
+                    <input
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Patient, ID, keyword…"
+                      className="w-full bg-transparent text-sm text-white placeholder:text-white/40 outline-none"
+                    />
+                  </div>
+
+                  <div className="ml-auto text-xs text-white/55">
+                    {filteredConsultations.length} shown
+                  </div>
+                </div>
+
                 <div className="mt-4 rounded-xl bg-[#0f1729]/35 ring-1 ring-white/10">
                   <div className="hidden grid-cols-12 gap-3 border-b border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/70 sm:grid">
                     <div className="col-span-3">Patient</div>
@@ -284,27 +414,16 @@ export default function DashboardPage() {
                     <div className="col-span-2 text-right">Submitted</div>
                   </div>
                   <div className="divide-y divide-white/10">
-                    <ConsultationRow
-                      id="CONS-1042"
-                      patient="Aoife Murphy"
-                      service="Sick note — flu symptoms"
-                      status="pending"
-                      submittedAt="09:14"
-                    />
-                    <ConsultationRow
-                      id="CONS-1038"
-                      patient="Seán O’Neill"
-                      service="Prescription renewal — asthma inhaler"
-                      status="approved"
-                      submittedAt="08:46"
-                    />
-                    <ConsultationRow
-                      id="CONS-1031"
-                      patient="Niamh Walsh"
-                      service="Referral letter — orthopaedics"
-                      status="declined"
-                      submittedAt="07:58"
-                    />
+                    {filteredConsultations.map((c) => (
+                      <ConsultationRow
+                        key={c.id}
+                        id={c.id}
+                        patient={c.patient}
+                        service={c.service}
+                        status={c.status}
+                        submittedAt={c.submittedAt}
+                      />
+                    ))}
                   </div>
                 </div>
               </div>
