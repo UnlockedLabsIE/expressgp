@@ -132,24 +132,16 @@ export default function DashboardPage() {
       <div className="mx-auto flex max-w-7xl">
         <aside className="hidden w-72 shrink-0 border-r border-white/10 px-5 py-6 md:block">
           <div className="flex items-center gap-3">
-            <div className="relative h-9 w-[164px] overflow-hidden rounded-lg">
+            <div className="relative h-12 w-[210px] overflow-hidden rounded-lg">
               <Image
                 src="/logo.png"
                 alt="ExpressGP"
                 fill
                 priority
-                sizes="164px"
+                sizes="210px"
                 className="object-cover opacity-95"
                 style={{ objectPosition: "50% 45%" }}
               />
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-white">
-                GP Dashboard
-              </p>
-              <p className="truncate text-xs text-white/60">
-                ExpressGP clinician workspace
-              </p>
             </div>
           </div>
 
@@ -198,7 +190,7 @@ export default function DashboardPage() {
               <div className="flex items-center gap-3">
                 <div className="hidden sm:block">
                   <p className="text-sm font-semibold text-white">
-                    Clinical dashboard
+                    Doctor dashboard
                   </p>
                   <p className="text-xs text-white/60">
                     Focused triage and consultation management
