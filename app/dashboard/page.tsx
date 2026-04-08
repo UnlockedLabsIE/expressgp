@@ -6,36 +6,38 @@ type NavItem = {
   href: string;
 };
 
-type StatTone = "approved" | "pending" | "declined" | "neutral";
+type StatTone = "approved" | "pending" | "declined" | "active" | "neutral";
 
 function toneClasses(tone: StatTone) {
   switch (tone) {
     case "approved":
       return {
         ring: "ring-1 ring-[#22c55e]/25",
-        iconBg: "bg-[#22c55e]/12",
-        icon: "text-[#22c55e]",
+        accent: "border-l-[#22c55e]",
         badge: "bg-[#22c55e]/12 text-[#166534] ring-1 ring-[#22c55e]/25",
       };
     case "pending":
       return {
         ring: "ring-1 ring-amber-500/20",
-        iconBg: "bg-amber-500/12",
-        icon: "text-amber-600",
+        accent: "border-l-amber-500",
         badge: "bg-amber-500/12 text-amber-800 ring-1 ring-amber-500/25",
       };
     case "declined":
       return {
         ring: "ring-1 ring-red-500/20",
-        iconBg: "bg-red-500/12",
-        icon: "text-red-600",
+        accent: "border-l-red-500",
         badge: "bg-red-500/12 text-red-800 ring-1 ring-red-500/25",
+      };
+    case "active":
+      return {
+        ring: "ring-1 ring-blue-500/20",
+        accent: "border-l-blue-500",
+        badge: "bg-blue-500/12 text-blue-800 ring-1 ring-blue-500/25",
       };
     default:
       return {
         ring: "ring-1 ring-slate-200",
-        iconBg: "bg-slate-100",
-        icon: "text-slate-700",
+        accent: "border-l-slate-200",
         badge: "bg-slate-100 text-slate-700 ring-1 ring-slate-200",
       };
   }
@@ -50,28 +52,25 @@ function StatCard(props: {
   const c = toneClasses(props.tone);
   return (
     <div
-      className={`rounded-2xl bg-white p-5 shadow-sm ${c.ring}`}
+      className={`h-full rounded-2xl bg-white p-5 shadow-sm border-l-4 ${c.accent} ${c.ring}`}
       role="group"
       aria-label={props.label}
     >
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex h-full flex-col justify-between gap-4">
         <div className="min-w-0">
           <p className="text-sm font-medium text-slate-600">{props.label}</p>
           <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
             {props.value}
           </p>
         </div>
-        <div className={`grid h-10 w-10 place-items-center rounded-xl ${c.iconBg}`}>
-          <span className={`text-sm font-semibold ${c.icon}`}>GP</span>
+        <div className="flex items-center justify-between gap-3">
+          <span
+            className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${c.badge}`}
+          >
+            {props.hint}
+          </span>
+          <span className="text-xs text-slate-500">Today</span>
         </div>
-      </div>
-      <div className="mt-4 flex items-center justify-between gap-3">
-        <span
-          className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${c.badge}`}
-        >
-          {props.hint}
-        </span>
-        <span className="text-xs text-slate-500">Today</span>
       </div>
     </div>
   );
@@ -272,7 +271,7 @@ export default function DashboardPage() {
               <StatCard
                 label="Active consultations"
                 value="7"
-                tone="neutral"
+                tone="active"
                 hint="In progress"
               />
             </section>
