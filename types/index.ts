@@ -58,7 +58,6 @@ export type Patient = {
   first_name: string;
   last_name: string;
   email: string;
-  password_hash: string;
   dob: ISODate | null;
   phone: string | null;
   address: string | null;

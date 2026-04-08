@@ -115,7 +115,6 @@ create table if not exists patients (
   first_name text not null,
   last_name text not null,
   email text not null unique,
-  password_hash text not null,
   dob date,
   phone text,
   address text,
@@ -366,6 +365,13 @@ on patients
 for select
 to authenticated
 using (auth.uid() = id);
+
+drop policy if exists "patients_insert_own" on patients;
+create policy "patients_insert_own"
+on patients
+for insert
+to authenticated
+with check (auth.uid() = id);
 
 drop policy if exists "patients_update_own" on patients;
 create policy "patients_update_own"
