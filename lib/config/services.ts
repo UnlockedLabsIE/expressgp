@@ -17,12 +17,26 @@ export type ServiceSubtype = {
   active: boolean;
 };
 
+// Patient-facing display data. Present only on services that appear in the
+// public B2C menu — insurance_report and corporate intentionally have no
+// `patient` block so they're filtered out of the homepage automatically.
+export type PatientFacing = {
+  slug: string; // URL segment, e.g. "sick-note"
+  title: string; // homepage card + intake page H1
+  tagline: string; // one-line summary, used on the intake page
+  priceFrom: number; // displayed as "From €X" on the homepage
+};
+
 export type ServiceConfig = {
   serviceType: ServiceType;
   label: string;
   description: string;
   subtypes: ServiceSubtype[];
+  patient?: PatientFacing;
 };
+
+// Convenience: a ServiceConfig that's been narrowed to "definitely B2C".
+export type PatientServiceConfig = ServiceConfig & { patient: PatientFacing };
 
 // ---- helpers ---------------------------------------------------------------
 
@@ -50,6 +64,12 @@ export const SERVICE_CONFIG: ServiceConfig[] = [
     label: "Prescription",
     description:
       "Repeat or new prescriptions reviewed by an Irish GP and sent to your pharmacy.",
+    patient: {
+      slug: "prescription",
+      title: "Request a Prescription",
+      tagline: "Repeat or new prescriptions",
+      priceFrom: 20,
+    },
     subtypes: flat(
       [
         ["uti", "UTI Treatment"],
@@ -89,6 +109,12 @@ export const SERVICE_CONFIG: ServiceConfig[] = [
     label: "Sick Note & Certificates",
     description:
       "Certified sick notes and medical certificates accepted by Irish employers, schools and travel providers.",
+    patient: {
+      slug: "sick-note",
+      title: "Get a Sick Note",
+      tagline: "Accepted by Irish employers",
+      priceFrom: 25,
+    },
     subtypes: flat(
       [
         ["employer_sick_note", "Employer Sick Note"],
@@ -112,10 +138,34 @@ export const SERVICE_CONFIG: ServiceConfig[] = [
   },
 
   {
+    // TODO: medical_cert subtypes are not yet specified — the patient menu
+    // and the /medical-cert route depend on this entry existing. Fill in
+    // proper subtypes (likely a subset of fit_to_*, *_medical_cert types
+    // from sick_note) when the spec is provided.
+    serviceType: "medical_cert",
+    label: "Medical Certificate",
+    description:
+      "Medical certificates issued by IMC-registered Irish doctors for work, travel and other needs.",
+    patient: {
+      slug: "medical-cert",
+      title: "Get a Medical Cert",
+      tagline: "Fit-to-work, fit-to-fly and more",
+      priceFrom: 25,
+    },
+    subtypes: [],
+  },
+
+  {
     serviceType: "referral",
     label: "Referral Letter",
     description:
       "Specialist, consultant and diagnostic referrals written by your GP.",
+    patient: {
+      slug: "referral",
+      title: "Request a Referral",
+      tagline: "Specialist, scan or consultant letters",
+      priceFrom: 30,
+    },
     subtypes: flat(
       [
         ["ed_referral", "ED Referral"],
@@ -154,6 +204,12 @@ export const SERVICE_CONFIG: ServiceConfig[] = [
     label: "GP Consultation",
     description:
       "Full online consultation with an IMC-registered Irish GP for general health concerns.",
+    patient: {
+      slug: "gp-consultation",
+      title: "GP Consultation",
+      tagline: "Talk to an Irish-registered GP",
+      priceFrom: 40,
+    },
     subtypes: flat(
       [
         ["general_consultation", "General Consultation"],
@@ -178,6 +234,12 @@ export const SERVICE_CONFIG: ServiceConfig[] = [
     label: "GLP-1 Programme",
     description:
       "Medically supervised weight management with GLP-1 medications.",
+    patient: {
+      slug: "glp1",
+      title: "GLP-1 (Weight Loss)",
+      tagline: "Clinically supervised weight management",
+      priceFrom: 60,
+    },
     subtypes: [
       {
         value: "initial_assessment",
@@ -258,3 +320,20 @@ export function getServiceConfig(
 ): ServiceConfig | undefined {
   return SERVICE_CONFIG.find((s) => s.serviceType === type);
 }
+
+// Lookup by patient-facing URL slug. Returns the narrowed `PatientServiceConfig`
+// type so callers don't need to null-check `patient` afterwards.
+export function getServiceBySlug(
+  slug: string,
+): PatientServiceConfig | undefined {
+  return SERVICE_CONFIG.find(
+    (s): s is PatientServiceConfig => s.patient?.slug === slug,
+  );
+}
+
+// All services that should appear in the patient-facing menu, in catalogue
+// order. insurance_report and corporate are excluded automatically because
+// they have no `patient` block.
+export const PATIENT_SERVICES: PatientServiceConfig[] = SERVICE_CONFIG.filter(
+  (s): s is PatientServiceConfig => s.patient !== undefined,
+);

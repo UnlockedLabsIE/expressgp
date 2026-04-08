@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { services } from "@/app/lib/services";
+import { PATIENT_SERVICES } from "@/lib/config/services";
 
 const trustItems = [
   "IMC Registered GPs",
@@ -73,19 +73,21 @@ function HeroQuickPicker() {
       </p>
 
       <ul className="mt-5">
-        {services.map((service, i) => (
-          <li key={service.slug}>
+        {PATIENT_SERVICES.map((service, i) => (
+          <li key={service.serviceType}>
             <Link
-              href={`/${service.slug}`}
+              href={`/${service.patient.slug}`}
               className={`flex items-center justify-between px-2 py-3 transition hover:bg-[#F9FAFB] ${
-                i < services.length - 1 ? "border-b border-gray-100" : ""
+                i < PATIENT_SERVICES.length - 1
+                  ? "border-b border-gray-100"
+                  : ""
               }`}
             >
               <span className="text-sm font-medium text-[#0F2744]">
-                {service.title.replace(/^(Request a|Get a) /, "")}
+                {service.patient.title.replace(/^(Request a|Get a) /, "")}
               </span>
               <span className="text-sm font-medium text-[#28A863]">
-                From €{service.priceFrom}
+                From €{service.patient.priceFrom}
               </span>
             </Link>
           </li>
@@ -263,10 +265,10 @@ export default function Home() {
           </div>
 
           <ul className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {services.map((service) => (
-              <li key={service.slug}>
+            {PATIENT_SERVICES.map((service) => (
+              <li key={service.serviceType}>
                 <Link
-                  href={`/${service.slug}`}
+                  href={`/${service.patient.slug}`}
                   className="group relative flex h-full flex-col rounded-2xl border border-gray-100 bg-white p-7 pl-8 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-[#2FB36F] hover:shadow-md"
                 >
                   {/* Left accent bar */}
@@ -275,7 +277,7 @@ export default function Home() {
                     className="absolute left-5 top-7 h-8 w-[3px] rounded-full bg-[#28A863]"
                   />
                   <h3 className="text-lg font-semibold text-[#0F2744]">
-                    {service.title}
+                    {service.patient.title}
                   </h3>
                   <p className="mt-2 text-sm text-[#6B7280]">
                     {service.description}
@@ -283,7 +285,7 @@ export default function Home() {
 
                   <div className="mt-6 flex items-center justify-between">
                     <span className="inline-flex items-center rounded-full bg-[#F0FDF4] px-3 py-1 text-xs font-medium text-[#28A863]">
-                      From €{service.priceFrom}
+                      From €{service.patient.priceFrom}
                     </span>
                     <span className="text-sm font-medium text-[#2F6FB6] opacity-0 transition group-hover:opacity-100">
                       Book now →

@@ -1,8 +1,12 @@
 import Link from "next/link";
-import type { Service } from "@/app/lib/services";
+import type { PatientServiceConfig } from "@/lib/config/services";
 
 // Shared placeholder until each service flow is built out individually.
-export default function ServicePagePlaceholder({ service }: { service: Service }) {
+export default function ServicePagePlaceholder({
+  service,
+}: {
+  service: PatientServiceConfig;
+}) {
   return (
     <div className="flex flex-1 flex-col bg-zinc-50 dark:bg-black">
       <main className="mx-auto w-full max-w-3xl px-6 py-16 sm:py-24">
@@ -14,10 +18,10 @@ export default function ServicePagePlaceholder({ service }: { service: Service }
         </Link>
 
         <h1 className="mt-6 text-4xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-          {service.title}
+          {service.patient.title}
         </h1>
         <p className="mt-2 text-lg text-emerald-700 dark:text-emerald-400">
-          {service.tagline}
+          {service.patient.tagline}
         </p>
         <p className="mt-6 max-w-2xl text-base leading-7 text-zinc-600 dark:text-zinc-400">
           {service.description}
