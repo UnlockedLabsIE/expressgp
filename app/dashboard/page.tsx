@@ -402,12 +402,12 @@ export default function DashboardPage() {
         </aside>
 
         <div className="min-w-0 flex-1">
-          <header className="sticky top-0 z-10 border-b border-white/10 bg-[#0f1729]/85 px-5 py-4 backdrop-blur">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
+          <header className="sticky top-0 z-10 border-b border-white/10 bg-[#0f1729]/85 px-5 pb-4 pt-6 backdrop-blur">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div className="flex items-end gap-3">
                 <div className="hidden sm:block">
-                  <p className="text-lg font-semibold tracking-tight text-white">
-                    Doctor Dashboard
+                  <p className="text-xl font-light tracking-[0.04em] text-white">
+                    Clinical Dashboard
                   </p>
                 </div>
               </div>
