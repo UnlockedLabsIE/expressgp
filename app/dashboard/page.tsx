@@ -196,17 +196,16 @@ export default function DashboardPage() {
           <header className="sticky top-0 z-10 border-b border-white/10 bg-[#0f1729]/85 px-5 py-4 backdrop-blur">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div className="rounded-xl bg-white px-2 py-1 shadow-sm ring-1 ring-black/5">
-                  <div className="relative h-7 w-[132px] overflow-hidden">
-                    <Image
-                      src="/logo.png"
-                      alt="ExpressGP"
-                      fill
-                      priority
-                      sizes="132px"
-                      className="object-cover object-center"
-                    />
-                  </div>
+                <div className="relative h-8 w-[152px] overflow-hidden rounded-lg ring-1 ring-white/10">
+                  <Image
+                    src="/logo.png"
+                    alt="ExpressGP"
+                    fill
+                    priority
+                    sizes="152px"
+                    className="object-cover opacity-95"
+                    style={{ objectPosition: "50% 45%" }}
+                  />
                 </div>
                 <span className="hidden h-6 w-px bg-white/15 sm:inline" />
                 <div className="hidden sm:block">
