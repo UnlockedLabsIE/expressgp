@@ -299,11 +299,9 @@ export default function DashboardPage() {
               <StatCard label="Active consultations" value="7"                   tone="active"   hint="In progress" />
             </section>
 
-            {/* Queue + breakdown */}
-            <section className="mt-6 grid gap-6 lg:grid-cols-3">
-
-              {/* Case queue */}
-              <div className="rounded-2xl bg-white/5 p-5 ring-1 ring-white/10 lg:col-span-2">
+            {/* Case queue */}
+            <section className="mt-6">
+              <div className="rounded-2xl bg-white/5 p-5 ring-1 ring-white/10">
                 <div>
                   <h2 className="text-base font-semibold text-white">Case queue</h2>
                   <p className="mt-1 text-sm text-white/60">Red flags first, then oldest. Use filters to narrow by type or status.</p>
@@ -360,37 +358,6 @@ export default function DashboardPage() {
                     {filteredConsultations.map((c) => (
                       <ConsultationRow key={c.id} {...c} />
                     ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Status breakdown */}
-              <div className="rounded-2xl bg-white/5 p-5 ring-1 ring-white/10">
-                <h2 className="text-base font-semibold text-white">Status breakdown</h2>
-                <p className="mt-1 text-sm text-white/60">Your queue health at a glance.</p>
-
-                <div className="mt-5 space-y-5">
-                  {[
-                    { label: "Approved", count: 28, pct: 64, textCls: "text-[#22c55e]", barCls: "bg-[#22c55e]" },
-                    { label: "Pending",  count: pendingCount, pct: 28, textCls: "text-amber-400", barCls: "bg-amber-500" },
-                    { label: "Declined", count: 3,  pct:  8, textCls: "text-red-400",   barCls: "bg-red-500"   },
-                  ].map(({ label, count, pct, textCls, barCls }) => (
-                    <div key={label}>
-                      <div className="flex items-baseline justify-between gap-2 text-sm">
-                        <span className="font-medium text-white/85">{label}</span>
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-xs font-medium tabular-nums text-white/50">{count} cases</span>
-                          <span className={`w-10 text-right font-semibold tabular-nums ${textCls}`}>{pct}%</span>
-                        </div>
-                      </div>
-                      <div className="mt-2 h-2 rounded-full bg-white/10">
-                        <div className={`h-2 rounded-full ${barCls}`} style={{ width: `${pct}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                  <div className="flex items-center justify-between border-t border-white/10 pt-3 text-xs text-white/50">
-                    <span>Total today</span>
-                    <span className="font-semibold tabular-nums text-white/70">43 cases</span>
                   </div>
                 </div>
               </div>
