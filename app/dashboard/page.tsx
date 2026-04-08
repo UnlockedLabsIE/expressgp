@@ -52,7 +52,7 @@ function StatCard(props: {
   const c = toneClasses(props.tone);
   return (
     <div
-      className={`h-full rounded-2xl bg-white p-5 shadow-sm border-l-4 ${c.accent} ${c.ring}`}
+      className={`h-full rounded-2xl bg-slate-50 p-5 border-l-4 ${c.accent} ring-1 ring-slate-200/70`}
       role="group"
       aria-label={props.label}
     >
@@ -249,35 +249,36 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <StatCard
-                label="Pending reviews"
-                value="12"
-                tone="pending"
-                hint="Needs clinician action"
-              />
-              <StatCard
-                label="Approved today"
-                value="28"
-                tone="approved"
-                hint="Completed decisions"
-              />
-              <StatCard
-                label="Declined today"
-                value="3"
-                tone="declined"
-                hint="Requires follow-up"
-              />
-              <StatCard
-                label="Active consultations"
-                value="7"
-                tone="active"
-                hint="In progress"
-              />
-            </section>
+            <div className="mt-6 rounded-3xl bg-slate-100 p-5 ring-1 ring-white/10">
+              <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <StatCard
+                  label="Pending reviews"
+                  value="12"
+                  tone="pending"
+                  hint="Needs clinician action"
+                />
+                <StatCard
+                  label="Approved today"
+                  value="28"
+                  tone="approved"
+                  hint="Completed decisions"
+                />
+                <StatCard
+                  label="Declined today"
+                  value="3"
+                  tone="declined"
+                  hint="Requires follow-up"
+                />
+                <StatCard
+                  label="Active consultations"
+                  value="7"
+                  tone="active"
+                  hint="In progress"
+                />
+              </section>
 
-            <section className="mt-6 grid gap-6 lg:grid-cols-3">
-              <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 lg:col-span-2">
+              <section className="mt-6 grid gap-6 lg:grid-cols-3">
+                <div className="rounded-2xl bg-slate-50 p-5 ring-1 ring-slate-200/70 lg:col-span-2">
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <h2 className="text-base font-semibold text-slate-900">
@@ -296,7 +297,7 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="mt-4 rounded-xl ring-1 ring-slate-200">
-                  <div className="hidden grid-cols-12 gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 sm:grid">
+                  <div className="hidden grid-cols-12 gap-3 border-b border-slate-200/70 bg-white/60 px-3 py-2 text-xs font-semibold text-slate-600 sm:grid">
                     <div className="col-span-3">Patient</div>
                     <div className="col-span-5">Service</div>
                     <div className="col-span-2">Status</div>
@@ -328,7 +329,7 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+              <div className="rounded-2xl bg-slate-50 p-5 ring-1 ring-slate-200/70">
                 <h2 className="text-base font-semibold text-slate-900">
                   Status breakdown
                 </h2>
@@ -386,7 +387,8 @@ export default function DashboardPage() {
                   </ul>
                 </div>
               </div>
-            </section>
+              </section>
+            </div>
 
             <footer className="mt-10 border-t border-white/10 pt-6 text-xs text-white/50">
               ExpressGP clinician tools — keep patient data secure and decisions documented.
