@@ -196,14 +196,14 @@ export default function DashboardPage() {
           <header className="sticky top-0 z-10 border-b border-white/10 bg-[#0f1729]/85 px-5 py-4 backdrop-blur">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div className="relative h-8 w-[152px] overflow-hidden rounded-lg ring-1 ring-white/10">
+                <div className="relative h-6 w-[112px] overflow-hidden rounded-md">
                   <Image
                     src="/logo.png"
                     alt="ExpressGP"
                     fill
                     priority
-                    sizes="152px"
-                    className="object-cover opacity-95"
+                    sizes="112px"
+                    className="object-cover opacity-90"
                     style={{ objectPosition: "50% 45%" }}
                   />
                 </div>
