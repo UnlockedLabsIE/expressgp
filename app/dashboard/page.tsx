@@ -313,13 +313,13 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-[#0f1729] text-slate-100">
       <div className="mx-auto flex max-w-7xl">
         <aside className="hidden w-72 shrink-0 border-r border-white/10 px-5 py-6 md:block">
-          <div className="relative h-12 w-[210px] overflow-hidden rounded-lg">
+          <div className="relative h-12 w-full overflow-hidden rounded-2xl bg-white/[0.06] ring-1 ring-white/10">
             <Image
               src="/logo.png"
               alt="ExpressGP"
               fill
               priority
-              sizes="210px"
+              sizes="232px"
               className="object-cover opacity-95"
               style={{ objectPosition: "50% 45%" }}
             />
