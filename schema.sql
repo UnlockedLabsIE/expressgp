@@ -358,3 +358,200 @@ alter table notifications enable row level security;
 alter table subscriptions enable row level security;
 alter table audit_log enable row level security;
 
+-- RLS Policies
+-- patients: authenticated user can only read/update their own row
+drop policy if exists "patients_select_own" on patients;
+create policy "patients_select_own"
+on patients
+for select
+to authenticated
+using (auth.uid() = id);
+
+drop policy if exists "patients_update_own" on patients;
+create policy "patients_update_own"
+on patients
+for update
+to authenticated
+using (auth.uid() = id)
+with check (auth.uid() = id);
+
+-- consultations: patients read own; doctors read assigned; patients insert for self
+drop policy if exists "consultations_select_patient_or_doctor" on consultations;
+create policy "consultations_select_patient_or_doctor"
+on consultations
+for select
+to authenticated
+using (
+  patient_id = auth.uid()
+  or partner_doctor_id = auth.uid()
+);
+
+drop policy if exists "consultations_insert_patient_own" on consultations;
+create policy "consultations_insert_patient_own"
+on consultations
+for insert
+to authenticated
+with check (patient_id = auth.uid());
+
+-- prescriptions: patients read via their consultations; doctors read/insert via assigned consultations
+drop policy if exists "prescriptions_select_patient_or_doctor" on prescriptions;
+create policy "prescriptions_select_patient_or_doctor"
+on prescriptions
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from consultations c
+    where c.id = prescriptions.consultation_id
+      and (c.patient_id = auth.uid() or c.partner_doctor_id = auth.uid())
+  )
+);
+
+drop policy if exists "prescriptions_insert_doctor_assigned" on prescriptions;
+create policy "prescriptions_insert_doctor_assigned"
+on prescriptions
+for insert
+to authenticated
+with check (
+  exists (
+    select 1
+    from consultations c
+    where c.id = prescriptions.consultation_id
+      and c.partner_doctor_id = auth.uid()
+  )
+);
+
+-- documents: same pattern as prescriptions
+drop policy if exists "documents_select_patient_or_doctor" on documents;
+create policy "documents_select_patient_or_doctor"
+on documents
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from consultations c
+    where c.id = documents.consultation_id
+      and (c.patient_id = auth.uid() or c.partner_doctor_id = auth.uid())
+  )
+);
+
+drop policy if exists "documents_insert_doctor_assigned" on documents;
+create policy "documents_insert_doctor_assigned"
+on documents
+for insert
+to authenticated
+with check (
+  exists (
+    select 1
+    from consultations c
+    where c.id = documents.consultation_id
+      and c.partner_doctor_id = auth.uid()
+  )
+);
+
+-- messages: patients/doctors can read; patients/doctors can insert on consultations they belong to
+drop policy if exists "messages_select_patient_or_doctor" on messages;
+create policy "messages_select_patient_or_doctor"
+on messages
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from consultations c
+    where c.id = messages.consultation_id
+      and (c.patient_id = auth.uid() or c.partner_doctor_id = auth.uid())
+  )
+);
+
+drop policy if exists "messages_insert_patient_own" on messages;
+create policy "messages_insert_patient_own"
+on messages
+for insert
+to authenticated
+with check (
+  sender_type = 'patient'
+  and sender_id = auth.uid()
+  and exists (
+    select 1
+    from consultations c
+    where c.id = messages.consultation_id
+      and c.patient_id = auth.uid()
+  )
+);
+
+drop policy if exists "messages_insert_doctor_assigned" on messages;
+create policy "messages_insert_doctor_assigned"
+on messages
+for insert
+to authenticated
+with check (
+  sender_type = 'partner_doctor'
+  and sender_id = auth.uid()
+  and exists (
+    select 1
+    from consultations c
+    where c.id = messages.consultation_id
+      and c.partner_doctor_id = auth.uid()
+  )
+);
+
+-- partner_doctors: authenticated can read (GP lookup); only service role can insert/update
+drop policy if exists "partner_doctors_select_authenticated" on partner_doctors;
+create policy "partner_doctors_select_authenticated"
+on partner_doctors
+for select
+to authenticated
+using (true);
+
+drop policy if exists "partner_doctors_write_service_role" on partner_doctors;
+create policy "partner_doctors_write_service_role"
+on partner_doctors
+for all
+to public
+using (auth.role() = 'service_role')
+with check (auth.role() = 'service_role');
+
+-- service-role-only tables: no anon/authenticated access
+drop policy if exists "audit_log_service_role_only" on audit_log;
+create policy "audit_log_service_role_only"
+on audit_log
+for all
+to public
+using (auth.role() = 'service_role')
+with check (auth.role() = 'service_role');
+
+drop policy if exists "notifications_service_role_only" on notifications;
+create policy "notifications_service_role_only"
+on notifications
+for all
+to public
+using (auth.role() = 'service_role')
+with check (auth.role() = 'service_role');
+
+drop policy if exists "call_logs_service_role_only" on call_logs;
+create policy "call_logs_service_role_only"
+on call_logs
+for all
+to public
+using (auth.role() = 'service_role')
+with check (auth.role() = 'service_role');
+
+drop policy if exists "triage_sessions_service_role_only" on triage_sessions;
+create policy "triage_sessions_service_role_only"
+on triage_sessions
+for all
+to public
+using (auth.role() = 'service_role')
+with check (auth.role() = 'service_role');
+
+drop policy if exists "subscriptions_service_role_only" on subscriptions;
+create policy "subscriptions_service_role_only"
+on subscriptions
+for all
+to public
+using (auth.role() = 'service_role')
+with check (auth.role() = 'service_role');
+
