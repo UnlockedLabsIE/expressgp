@@ -562,33 +562,32 @@ export default function DashboardPage() {
                   Your queue health at a glance.
                 </p>
 
-                <div className="mt-5 space-y-4">
-                  <div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium text-white/85">Approved</span>
-                      <span className="font-semibold text-[#22c55e]">64%</span>
+                <div className="mt-5 space-y-5">
+                  {[
+                    { label: "Approved", count: 28, pct: 64, colour: "#22c55e", textCls: "text-[#22c55e]", barCls: "bg-[#22c55e]" },
+                    { label: "Pending",  count: 12, pct: 28, colour: "", textCls: "text-amber-400", barCls: "bg-amber-500" },
+                    { label: "Declined", count:  3, pct:  8, colour: "", textCls: "text-red-400",   barCls: "bg-red-500"   },
+                  ].map(({ label, count, pct, textCls, barCls }) => (
+                    <div key={label}>
+                      <div className="flex items-baseline justify-between gap-2 text-sm">
+                        <span className="font-medium text-white/85">{label}</span>
+                        <div className="flex items-baseline gap-2">
+                          <span className={`text-xs font-medium tabular-nums text-white/50`}>
+                            {count} cases
+                          </span>
+                          <span className={`w-10 text-right font-semibold tabular-nums ${textCls}`}>
+                            {pct}%
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-2 h-2 rounded-full bg-white/10">
+                        <div className={`h-2 rounded-full ${barCls}`} style={{ width: `${pct}%` }} />
+                      </div>
                     </div>
-                    <div className="mt-2 h-2 rounded-full bg-white/10">
-                      <div className="h-2 w-[64%] rounded-full bg-[#22c55e]" />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium text-white/85">Pending</span>
-                      <span className="font-semibold text-amber-600">28%</span>
-                    </div>
-                    <div className="mt-2 h-2 rounded-full bg-white/10">
-                      <div className="h-2 w-[28%] rounded-full bg-amber-500" />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium text-white/85">Declined</span>
-                      <span className="font-semibold text-red-600">8%</span>
-                    </div>
-                    <div className="mt-2 h-2 rounded-full bg-white/10">
-                      <div className="h-2 w-[8%] rounded-full bg-red-500" />
-                    </div>
+                  ))}
+                  <div className="border-t border-white/10 pt-3 flex items-center justify-between text-xs text-white/50">
+                    <span>Total today</span>
+                    <span className="font-semibold tabular-nums text-white/70">43 cases</span>
                   </div>
                 </div>
               </div>
