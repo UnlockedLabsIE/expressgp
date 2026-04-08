@@ -313,23 +313,39 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-[#0f1729] text-slate-100">
       <div className="mx-auto flex max-w-7xl">
         <aside className="hidden w-72 shrink-0 border-r border-white/10 px-5 py-6 md:block">
-          <div>
+          <div className="relative h-12 w-[210px] overflow-hidden rounded-lg">
+            <Image
+              src="/logo.png"
+              alt="ExpressGP"
+              fill
+              priority
+              sizes="210px"
+              className="object-cover opacity-95"
+              style={{ objectPosition: "50% 45%" }}
+            />
+          </div>
+
+          <div className="mt-5 rounded-2xl bg-white/[0.06] p-3.5 ring-1 ring-white/10">
             <div className="flex items-center gap-3">
-              <div className="relative h-12 w-[210px] overflow-hidden rounded-lg">
-                <Image
-                  src="/logo.png"
-                  alt="ExpressGP"
-                  fill
-                  priority
-                  sizes="210px"
-                  className="object-cover opacity-95"
-                  style={{ objectPosition: "50% 45%" }}
-                />
+              <div
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#22c55e]/15 text-xs font-semibold tracking-tight text-[#86efac] ring-1 ring-[#22c55e]/35"
+                aria-hidden
+              >
+                JO
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-white">
+                  {"Dr. John O'Donovan"}
+                </p>
+                <p className="mt-1 flex items-center gap-1.5 text-xs text-white/55">
+                  <span
+                    className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#22c55e] shadow-[0_0_0_2px_rgba(34,197,94,0.25)]"
+                    aria-hidden
+                  />
+                  Partner GP · Signed in
+                </p>
               </div>
             </div>
-            <p className="mt-3 text-sm font-medium text-white/90">
-              {"Dr. John O'Donovan"}
-            </p>
           </div>
 
           <nav className="mt-8 space-y-1">
@@ -341,23 +357,29 @@ export default function DashboardPage() {
                   key={item.href}
                   href={item.href}
                   className={[
-                    "group flex items-center justify-between rounded-xl px-3 py-2 text-sm font-medium transition-colors",
+                    "group flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
                     isActive
                       ? "bg-white/10 text-white ring-1 ring-white/15"
                       : "text-white/75 hover:bg-white/5 hover:text-white",
                   ].join(" ")}
                 >
-                  <span className="flex items-center gap-2">
-                    {item.label}
-                    {isMessages && unreadMessages > 0 ? (
-                      <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
-                        {unreadMessages > 99 ? "99+" : unreadMessages}
-                      </span>
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  {isMessages && unreadMessages > 0 ? (
+                    <span
+                      className="inline-flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full border border-red-400/35 bg-red-500/15 px-1.5 text-[11px] font-semibold tabular-nums leading-none text-red-200"
+                      aria-label={`${unreadMessages} unread messages`}
+                    >
+                      {unreadMessages > 99 ? "99+" : unreadMessages}
+                    </span>
+                  ) : null}
+                  <span
+                    className="flex h-4 w-4 shrink-0 items-center justify-center"
+                    aria-hidden
+                  >
+                    {isActive ? (
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#22c55e]" />
                     ) : null}
                   </span>
-                  {isActive ? (
-                    <span className="h-1.5 w-1.5 rounded-full bg-[#22c55e]" />
-                  ) : null}
                 </Link>
               );
             })}
