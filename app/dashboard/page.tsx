@@ -385,19 +385,13 @@ export default function DashboardPage() {
             })}
           </nav>
 
-          <div className="mt-8 rounded-2xl bg-white/5 p-4 ring-1 ring-white/10">
-            <p className="text-sm font-semibold text-white">Quick actions</p>
-            <p className="mt-1 text-xs leading-5 text-white/60">
-              Jump to your queue and resolve pending items quickly.
-            </p>
-            <div className="mt-4 grid gap-2">
-              <button className="w-full rounded-xl bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm hover:bg-white/90">
-                Open pending queue
-              </button>
-              <button className="w-full rounded-xl bg-white/10 px-3 py-2 text-sm font-semibold text-white ring-1 ring-white/15 hover:bg-white/15">
-                Start video consult
-              </button>
-            </div>
+          <div className="mt-8">
+            <button className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white/5 px-4 py-3 text-sm font-medium text-white ring-1 ring-white/10 transition-colors hover:bg-white/10">
+              <svg className="h-4 w-4 text-white/70" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M15 10l4.553-2.07A1 1 0 0 1 21 8.845v6.31a1 1 0 0 1-1.447.915L15 14M4 8h11a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Start video consult
+            </button>
           </div>
         </aside>
 
@@ -434,11 +428,7 @@ export default function DashboardPage() {
                   A fast scan of today’s workload and your current queue.
                 </p>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <button className="rounded-xl bg-white/10 px-3 py-2 text-sm font-semibold text-white ring-1 ring-white/15 hover:bg-white/15">
-                  View all
-                </button>
-              </div>
+              <div />
             </div>
 
             <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -470,21 +460,13 @@ export default function DashboardPage() {
 
             <section className="mt-6 grid gap-6 lg:grid-cols-3">
                 <div className="rounded-2xl bg-white/5 p-5 ring-1 ring-white/10 lg:col-span-2">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <h2 className="text-base font-semibold text-white">
-                      Recent consultations
-                    </h2>
-                    <p className="mt-1 text-sm text-white/60">
-                      Awaiting decision by default. Oldest items are shown first.
-                    </p>
-                  </div>
-                  <Link
-                    href="/dashboard/consultations"
-                    className="rounded-xl bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-white/90"
-                  >
-                    Open queue
-                  </Link>
+                <div>
+                  <h2 className="text-base font-semibold text-white">
+                    Case queue
+                  </h2>
+                  <p className="mt-1 text-sm text-white/60">
+                    Awaiting decision · oldest first. Use filters to narrow by type or status.
+                  </p>
                 </div>
 
                 <div className="mt-4 flex flex-wrap items-center gap-2">
