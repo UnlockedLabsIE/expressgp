@@ -75,9 +75,6 @@ export default function RegisterPage() {
       first_name: firstName.trim(),
       last_name: lastName.trim(),
       email: email.trim(),
-      // schema.sql declares password_hash NOT NULL even though Supabase auth
-      // owns the password. Placeholder until that column is dropped.
-      password_hash: "managed_by_supabase_auth",
       dob,
       phone: phone.trim() || null,
       gender: gender || null,
