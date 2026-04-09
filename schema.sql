@@ -390,6 +390,9 @@ to authenticated
 using (
   patient_id = auth.uid()
   or partner_doctor_id = auth.uid()
+  or (status = 'pending' and exists (
+    select 1 from partner_doctors where id = auth.uid()
+  ))
 );
 
 drop policy if exists "consultations_insert_patient_own" on consultations;
@@ -398,6 +401,23 @@ on consultations
 for insert
 to authenticated
 with check (patient_id = auth.uid());
+
+-- GPs can update consultations they own or any pending case they are claiming
+drop policy if exists "consultations_update_doctor" on consultations;
+create policy "consultations_update_doctor"
+on consultations
+for update
+to authenticated
+using (
+  partner_doctor_id = auth.uid()
+  or (
+    partner_doctor_id is null
+    and exists (select 1 from partner_doctors where id = auth.uid())
+  )
+)
+with check (
+  partner_doctor_id = auth.uid()
+);
 
 -- prescriptions: patients read via their consultations; doctors read/insert via assigned consultations
 drop policy if exists "prescriptions_select_patient_or_doctor" on prescriptions;
