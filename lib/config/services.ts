@@ -138,10 +138,6 @@ export const SERVICE_CONFIG: ServiceConfig[] = [
   },
 
   {
-    // TODO: medical_cert subtypes are not yet specified — the patient menu
-    // and the /medical-cert route depend on this entry existing. Fill in
-    // proper subtypes (likely a subset of fit_to_*, *_medical_cert types
-    // from sick_note) when the spec is provided.
     serviceType: "medical_cert",
     label: "Medical Certificate",
     description:
@@ -152,7 +148,56 @@ export const SERVICE_CONFIG: ServiceConfig[] = [
       tagline: "Fit-to-work, fit-to-fly and more",
       priceFrom: 25,
     },
-    subtypes: [],
+    subtypes: [
+      {
+        value: "fit_to_work",
+        label: "Fit to Work Certificate",
+        price: 25,
+        active: true,
+      },
+      {
+        value: "fit_to_fly",
+        label: "Fit to Fly Certificate",
+        price: 25,
+        active: true,
+      },
+      {
+        value: "fit_to_travel",
+        label: "Fit to Travel Certificate",
+        price: 25,
+        active: true,
+      },
+      {
+        value: "pre_employment",
+        label: "Pre-Employment Medical Certificate",
+        price: 25,
+        active: true,
+      },
+      {
+        value: "visa_immigration",
+        label: "Visa / Immigration Certificate",
+        price: 25,
+        active: true,
+      },
+      {
+        value: "college_cert",
+        label: "College Medical Certificate",
+        price: 25,
+        active: true,
+      },
+      {
+        value: "sports_cert",
+        label: "Sports Medical Certificate",
+        price: 25,
+        active: true,
+      },
+      {
+        value: "other_cert",
+        label: "Other Medical Certificate",
+        price: 25,
+        active: true,
+      },
+    ],
   },
 
   {
