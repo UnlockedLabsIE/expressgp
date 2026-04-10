@@ -238,8 +238,9 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
     });
   }
 
-  /** Fire-and-forget SMS to the patient's phone number (if available). */
-  async function sendSmsToPatient(body: string) {
+  /** Fire-and-forget WhatsApp message to the patient (if phone number available).
+   *  No-op until Bird WhatsApp channel is configured via BIRD_WHATSAPP_CHANNEL_ID. */
+  async function sendWhatsAppToPatient(body: string) {
     const phone = consult?.patient?.phone;
     if (!phone) return;
     try {
@@ -249,7 +250,7 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
         body: JSON.stringify({ to: phone, body }),
       });
     } catch (err) {
-      console.error("[SMS] failed to send:", err);
+      console.error("[WhatsApp] failed to send:", err);
     }
   }
 
@@ -272,10 +273,9 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
       const data = await res.json() as { hostRoomUrl: string; roomUrl: string };
       setHostRoomUrl(data.hostRoomUrl);
       setPatientRoomUrl(data.roomUrl);
-      // Notify patient with their link via message and SMS
       const videoMsg = `Your GP is ready for your video consultation. Join here: ${data.roomUrl}`;
       await sendMsg(videoMsg);
-      await sendSmsToPatient(`ExpressGP: Your GP is ready for your video call. Join here: ${data.roomUrl}`);
+      await sendWhatsAppToPatient(`ExpressGP: Your GP is ready for your video call. Join here: ${data.roomUrl}`);
     } finally {
       setVideoLoading(false);
     }
@@ -881,7 +881,7 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
                         `To proceed, please log in to your ExpressGP dashboard to complete payment. ` +
                         `Once payment is confirmed, your booking link will be made available to schedule a time slot.`;
                       await sendMsg(msg);
-                      await sendSmsToPatient(
+                      await sendWhatsAppToPatient(
                         `ExpressGP: Your GP would like to offer a video consultation (€${upliftAmount} fee). ` +
                         `Log in to your ExpressGP dashboard to complete payment and book your slot.`
                       );

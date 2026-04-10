@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { sendSms } from "@/lib/sms";
+import { sendWhatsApp } from "@/lib/whatsapp";
 
 export async function POST(req: NextRequest) {
-  // Authenticate the GP making the request
   const cookieStore = await cookies();
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -42,7 +41,7 @@ export async function POST(req: NextRequest) {
   const e164 = normalised.startsWith("+") ? normalised : `+${normalised}`;
 
   try {
-    await sendSms(e164, body);
+    await sendWhatsApp(e164, body);
     return NextResponse.json({ ok: true });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
