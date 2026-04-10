@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { getUnreadMessageCount } from "@/lib/queries";
+import { getPartnerDoctor, getUnreadMessageCount } from "@/lib/queries";
 import SidebarNav from "./SidebarNav";
 import SignOutButton from "./SignOutButton";
 
@@ -9,7 +9,19 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const unreadMessages = await getUnreadMessageCount();
+  const [unreadMessages, doctor] = await Promise.all([
+    getUnreadMessageCount(),
+    getPartnerDoctor(),
+  ]);
+
+  const firstName = doctor?.first_name ?? "";
+  const lastName = doctor?.last_name ?? "";
+  const displayName = firstName || lastName
+    ? `Dr. ${firstName} ${lastName}`.trim()
+    : "Partner GP";
+  const initials = firstName && lastName
+    ? `${firstName[0]}${lastName[0]}`.toUpperCase()
+    : "GP";
 
   return (
     <div className="min-h-screen bg-[#0f1729] text-slate-100">
@@ -37,11 +49,11 @@ export default async function DashboardLayout({
                 className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#22c55e]/15 text-xs font-semibold tracking-tight text-[#86efac] ring-1 ring-[#22c55e]/35"
                 aria-hidden
               >
-                JO
+                {initials}
               </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-white">
-                  {"Dr. John O'Donovan"}
+                  {displayName}
                 </p>
                 <p className="mt-1 flex items-center gap-1.5 text-xs text-white/55">
                   <span

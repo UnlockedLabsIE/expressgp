@@ -198,7 +198,7 @@ function ConsultationRow({ consult, position }: { consult: ConsultationRow; posi
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function DashboardPage({ consultations, activeCases }: { consultations: ConsultationRow[]; activeCases: ConsultationRow[] }) {
+export default function DashboardPage({ consultations, activeCases, isAcceptingCases }: { consultations: ConsultationRow[]; activeCases: ConsultationRow[]; isAcceptingCases: boolean }) {
   const [queueStatus, setQueueStatus] = useState<"awaiting_decision" | "all" | "pending" | "approved" | "declined">("awaiting_decision");
   const [caseType, setCaseType] = useState<"all" | string>("all");
   const [query, setQuery] = useState("");
@@ -232,6 +232,19 @@ export default function DashboardPage({ consultations, activeCases }: { consulta
 
   return (
     <>
+      {!isAcceptingCases && (
+        <div className="flex items-center gap-3 border-b border-red-500/30 bg-red-500/10 px-5 py-3">
+          <svg className="h-4 w-4 shrink-0 text-red-400" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <p className="text-sm text-red-300">
+            You are not currently accepting new consultations.{" "}
+            <a href="/dashboard/settings#availability" className="underline underline-offset-2 hover:text-red-100">
+              Update in Settings
+            </a>
+          </p>
+        </div>
+      )}
       <header className="sticky top-0 z-10 border-b border-white/10 bg-[#0f1729]/85 px-5 pb-4 pt-6 backdrop-blur">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <p className="hidden text-xl font-light tracking-[0.04em] text-white sm:block">Clinical Dashboard</p>

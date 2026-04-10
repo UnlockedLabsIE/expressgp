@@ -1,4 +1,4 @@
-import type { Consultation, Message, Patient, Prescription, Document, TriageSession } from "@/types";
+import type { Consultation, DoctorNotificationPreferences, Message, PartnerDoctor, Patient, Prescription, Document, TriageSession } from "@/types";
 import { createServerSupabaseClient } from "./supabase-server";
 
 // ─── Types returned by queries (joined rows) ─────────────────────────────────
@@ -112,6 +112,44 @@ export async function getConsultationById(id: string): Promise<ConsultationDetai
     return null;
   }
   return data as ConsultationDetail;
+}
+
+// ─── Fetch the logged-in GP's partner_doctors record ─────────────────────────
+export async function getPartnerDoctor(): Promise<PartnerDoctor | null> {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data, error } = await supabase
+    .from("partner_doctors")
+    .select("*")
+    .eq("id", user.id)
+    .single();
+
+  if (error) {
+    console.error("[getPartnerDoctor]", error.message);
+    return null;
+  }
+  return data as PartnerDoctor;
+}
+
+// ─── Fetch notification preferences for the logged-in GP ─────────────────────
+export async function getNotificationPreferences(): Promise<DoctorNotificationPreferences | null> {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data, error } = await supabase
+    .from("doctor_notification_preferences")
+    .select("*")
+    .eq("doctor_id", user.id)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[getNotificationPreferences]", error.message);
+    return null;
+  }
+  return data as DoctorNotificationPreferences | null;
 }
 
 // ─── Count unread messages for the logged-in doctor ──────────────────────────

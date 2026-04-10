@@ -74,7 +74,28 @@ export type PartnerDoctor = {
   imc_number: string;
   employment_type: EmploymentType;
   is_active: boolean;
+  // Availability — add_availability_columns.sql
+  is_accepting_cases: boolean;
+  out_of_office_until: ISOTimestamp | null;
+  // Prescription defaults — add_prescription_defaults.sql
+  default_pharmacy_name: string | null;
+  default_pharmacy_address: string | null;
+  // Profile photo — add_profile_photo.sql
+  profile_photo_url: string | null;
   created_at: ISOTimestamp;
+};
+
+export type DoctorNotificationPreferences = {
+  id: UUID;
+  doctor_id: UUID;
+  email_new_consultation: boolean;
+  email_new_message: boolean;
+  email_red_flag: boolean;
+  sms_new_consultation: boolean;
+  sms_red_flag: boolean;
+  daily_summary_email: boolean;
+  created_at: ISOTimestamp;
+  updated_at: ISOTimestamp;
 };
 
 export type Company = {
