@@ -40,6 +40,7 @@ export async function getConsultations(): Promise<ConsultationRow[]> {
 export async function getActiveCases(): Promise<ConsultationRow[]> {
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
+  console.log("[getActiveCases] user:", user?.id ?? "NO USER");
   if (!user) return [];
 
   const { data, error } = await supabase
@@ -49,6 +50,7 @@ export async function getActiveCases(): Promise<ConsultationRow[]> {
     .eq("partner_doctor_id", user.id)
     .order("updated_at", { ascending: false });
 
+  console.log("[getActiveCases] rows:", data?.length ?? 0, "error:", error?.message ?? "none");
   if (error) {
     console.error("[getActiveCases]", error.message);
     return [];

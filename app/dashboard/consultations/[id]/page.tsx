@@ -133,6 +133,17 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
   const [cert, setCert] = useState({ type: "sick_note", reason: "", from: todayStr(), to: plusDays(7), notes: "" });
   const [ref, setRef] = useState({ specialty: "", urgency: "routine", info: "" });
 
+  // GP identity (for PDFs)
+  const [gpName, setGpName] = useState("Dr. John O'Donovan");
+  const [gpImc,  setGpImc]  = useState("IMC-XXXXXX");
+  // Re-download callback stored after issue
+  const [redownload, setRedownload] = useState<(() => Promise<void>) | null>(null);
+
+  // Video call
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [hostRoomUrl, setHostRoomUrl]   = useState<string | null>(null);
+  const [patientRoomUrl, setPatientRoomUrl] = useState<string | null>(null);
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [msgInput, setMsgInput] = useState("");
   const msgEndRef = useRef<HTMLDivElement>(null);
@@ -178,16 +189,18 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
         setStep("done");
       }
 
-      // Auto-claim if still pending — use .eq guard so two GPs can't both claim
-      if (data.status === "pending") {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          await supabase.from("consultations")
-            .update({ status: "under_review", partner_doctor_id: user.id })
-            .eq("id", id)
-            .eq("status", "pending");
-          setStatus("under_review");
-        }
+      // Do NOT auto-claim — GP must explicitly claim the case
+
+      // Fetch GP details for PDFs
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: gp } = await supabase
+          .from("partner_doctors")
+          .select("name, imc_number")
+          .eq("id", user.id)
+          .single();
+        if (gp?.name)       setGpName(gp.name);
+        if (gp?.imc_number) setGpImc(gp.imc_number);
       }
 
       setLoading(false);
@@ -228,6 +241,26 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
     await supabase.from("consultations").update({ doctor_notes: gpNotes }).eq("id", id);
   }
 
+  // ── Start Whereby video call ───────────────────────────────────────────────
+
+  async function startVideoCall() {
+    setVideoLoading(true);
+    try {
+      const res = await fetch("/api/video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ consultationId: id }),
+      });
+      const data = await res.json() as { hostRoomUrl: string; roomUrl: string };
+      setHostRoomUrl(data.hostRoomUrl);
+      setPatientRoomUrl(data.roomUrl);
+      // Notify patient with their link via message
+      await sendMsg(`Your GP is ready for your video consultation. Join here: ${data.roomUrl}`);
+    } finally {
+      setVideoLoading(false);
+    }
+  }
+
   // ── Decline ───────────────────────────────────────────────────────────────
 
   async function handleDecline() {
@@ -264,6 +297,10 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
   async function handleIssue() {
     setIssuing(true);
     try {
+      const issuedAt = new Date().toISOString();
+      const patient  = consult!.patient!;
+      const patientName = `${patient.first_name} ${patient.last_name}`;
+
       if (docType === "prescription") {
         await supabase.from("prescriptions").insert({
           consultation_id: id,
@@ -272,14 +309,14 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
           frequency: rx.frequency,
           duration: rx.duration,
           pharmacy_name: rx.pharmacy,
-          issued_at: new Date().toISOString(),
+          issued_at: issuedAt,
         });
       } else if (docType === "referral") {
         await supabase.from("documents").insert({
           consultation_id: id,
           type: "referral_letter",
           content: JSON.stringify({ specialty: ref.specialty, urgency: ref.urgency, clinical_info: ref.info }),
-          issued_at: new Date().toISOString(),
+          issued_at: issuedAt,
         });
       } else if (["sick_note", "medical_cert", "insurance_report"].includes(docType)) {
         const typeMap: Record<string, string> = {
@@ -289,7 +326,7 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
           consultation_id: id,
           type: typeMap[docType] ?? "other",
           content: JSON.stringify({ reason: cert.reason, from: cert.from, to: cert.to, notes: cert.notes }),
-          issued_at: new Date().toISOString(),
+          issued_at: issuedAt,
         });
       }
 
@@ -298,8 +335,29 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
         doctor_notes: gpNotes,
       }).eq("id", id);
 
-      // Notify patient
       await sendMsg("Your consultation has been reviewed and approved. Please check your dashboard for your document.");
+
+      // Build PDF download function based on doc type
+      const buildDownload = async () => {
+        const common = { patientName, dob: patient.dob ?? "", address: patient.address ?? "", consultationId: id, gpName, imcNumber: gpImc, issuedAt };
+        if (docType === "prescription") {
+          const { downloadPrescription } = await import("@/lib/pdf/generate");
+          await downloadPrescription({ ...common, drug: rx.drug, dose: rx.dose, frequency: rx.frequency, duration: rx.duration, pharmacy: rx.pharmacy });
+        } else if (docType === "referral") {
+          const { downloadReferral } = await import("@/lib/pdf/generate");
+          await downloadReferral({ ...common, specialty: ref.specialty, urgency: ref.urgency as "routine"|"urgent"|"emergency", clinicalInfo: ref.info });
+        } else if (docType === "sick_note") {
+          const { downloadSickNote } = await import("@/lib/pdf/generate");
+          await downloadSickNote({ ...common, fromDate: cert.from, toDate: cert.to });
+        } else {
+          const { downloadMedicalCert } = await import("@/lib/pdf/generate");
+          await downloadMedicalCert({ ...common, certType: (docType as "medical_cert"|"insurance_report") ?? "medical_cert", fromDate: cert.from, toDate: cert.to, notes: cert.notes });
+        }
+      };
+
+      // Trigger immediate download then store for re-download
+      await buildDownload();
+      setRedownload(() => buildDownload);
 
       setStatus("approved");
       setStep("done");
@@ -339,6 +397,7 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
   })();
 
   const isFinalised = ["approved", "declined"].includes(status);
+  void isFinalised; // used via step === "done"
 
   return (
     <div className="min-h-screen bg-[#0f1729] text-slate-100">
@@ -363,6 +422,17 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
             <span className="hidden shrink-0 font-mono text-xs text-white/40 sm:block">{id.slice(0, 8).toUpperCase()}</span>
           </div>
           <div className="flex shrink-0 items-center gap-3">
+            {/* Payment status — GPs should not action unpaid cases */}
+            {consult.payment_status === "unpaid" && (
+              <span className="hidden shrink-0 items-center gap-1 rounded-full bg-red-500/15 px-2.5 py-1 text-xs font-semibold text-red-300 ring-1 ring-red-500/25 sm:inline-flex">
+                ⚠ Unpaid
+              </span>
+            )}
+            {consult.payment_status === "paid" && (
+              <span className="hidden shrink-0 items-center rounded-full bg-green-500/10 px-2.5 py-1 text-xs font-medium text-green-300 ring-1 ring-green-500/20 sm:inline-flex">
+                Paid
+              </span>
+            )}
             <span className={`hidden rounded-full px-2.5 py-1 text-xs font-medium capitalize sm:inline-flex ${STATUS_BADGE[status] ?? STATUS_BADGE.pending}`}>
               {status.replace(/_/g, " ")}
             </span>
@@ -381,8 +451,12 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
           <Card title="Patient details">
             <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-3">
               <Field label="Full name">{patientName}</Field>
-              <Field label="Date of birth">{consult.patient.dob ?? "—"}</Field>
-              <Field label="Age / Sex">{age ?? "—"} · {consult.patient.gender ?? "—"}</Field>
+              <Field label="Date of birth">
+                {consult.patient.dob
+                  ? new Date(consult.patient.dob).toLocaleDateString("en-IE", { day: "2-digit", month: "2-digit", year: "numeric" })
+                  : "—"}
+              </Field>
+              <Field label="Age / Sex">{age ?? "—"} · {consult.patient.gender ? consult.patient.gender.charAt(0).toUpperCase() + consult.patient.gender.slice(1) : "—"}</Field>
               <Field label="Phone">
                 {consult.patient.phone
                   ? <a href={`tel:${consult.patient.phone}`} className="hover:text-white transition-colors">{consult.patient.phone}</a>
@@ -481,21 +555,61 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
 
               {/* ── DONE state ── */}
               {step === "done" && (
-                <div className={`flex items-center gap-2.5 rounded-xl px-4 py-3 ${
-                  status === "approved" ? "bg-[#22c55e]/10 ring-1 ring-[#22c55e]/25" :
-                  status === "declined" ? "bg-red-500/10 ring-1 ring-red-500/25" :
-                  "bg-amber-500/10 ring-1 ring-amber-500/25"}`}>
-                  <svg className={`h-4 w-4 shrink-0 ${status === "approved" ? "text-[#22c55e]" : status === "declined" ? "text-red-400" : "text-amber-400"}`} viewBox="0 0 24 24" fill="none">
-                    <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  <span className={`text-sm font-semibold ${status === "approved" ? "text-[#bbf7d0]" : status === "declined" ? "text-red-200" : "text-amber-200"}`}>
-                    {status === "approved" ? "Issued & approved" : status === "declined" ? "Declined" : "More info requested — awaiting patient"}
-                  </span>
+                <div className="space-y-3">
+                  <div className={`flex items-center gap-2.5 rounded-xl px-4 py-3 ${
+                    status === "approved" ? "bg-[#22c55e]/10 ring-1 ring-[#22c55e]/25" :
+                    status === "declined" ? "bg-red-500/10 ring-1 ring-red-500/25" :
+                    "bg-amber-500/10 ring-1 ring-amber-500/25"}`}>
+                    <svg className={`h-4 w-4 shrink-0 ${status === "approved" ? "text-[#22c55e]" : status === "declined" ? "text-red-400" : "text-amber-400"}`} viewBox="0 0 24 24" fill="none">
+                      <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <span className={`text-sm font-semibold ${status === "approved" ? "text-[#bbf7d0]" : status === "declined" ? "text-red-200" : "text-amber-200"}`}>
+                      {status === "approved" ? "Issued & approved" : status === "declined" ? "Declined" : "More info requested — awaiting patient"}
+                    </span>
+                  </div>
+                  {/* Re-download PDF if available */}
+                  {redownload && status === "approved" && (
+                    <button
+                      onClick={() => redownload()}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 text-sm font-medium text-white/70 ring-1 ring-white/10 transition-all hover:bg-white/10 hover:text-white">
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
+                        <path d="M12 15V3m0 12l-4-4m4 4l4-4M2 17l.621 2.485A2 2 0 004.561 21h14.878a2 2 0 001.94-1.515L22 17" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      Download PDF
+                    </button>
+                  )}
                 </div>
               )}
 
-              {/* ── IDLE state — main action buttons ── */}
-              {step === "idle" && !isFinalised && (
+              {/* ── PENDING — not yet claimed ── */}
+              {step === "idle" && status === "pending" && (
+                <div className="space-y-3">
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/8 px-4 py-3">
+                    <p className="text-xs font-semibold text-amber-300">Unclaimed</p>
+                    <p className="mt-0.5 text-xs text-amber-200/60">Review the case details, then claim it to take action. Claiming assigns it to you and removes it from the shared queue.</p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      const { data: { user } } = await supabase.auth.getUser();
+                      if (!user) return;
+                      await supabase.from("consultations")
+                        .update({ status: "under_review", partner_doctor_id: user.id })
+                        .eq("id", id)
+                        .eq("status", "pending");
+                      setStatus("under_review");
+                    }}
+                    className="w-full rounded-xl bg-blue-500/15 px-4 py-3 text-sm font-bold tracking-wide text-blue-200 ring-1 ring-blue-500/30 transition-all hover:bg-blue-500/25">
+                    Claim this case
+                  </button>
+                  <Link href="/dashboard/consultations"
+                    className="block w-full rounded-xl bg-white/5 px-4 py-2.5 text-center text-sm font-medium text-white/50 ring-1 ring-white/10 transition-all hover:bg-white/10 hover:text-white/80">
+                    Leave in queue
+                  </Link>
+                </div>
+              )}
+
+              {/* ── IDLE state — claimed, main action buttons ── */}
+              {step === "idle" && (status === "under_review" || status === "more_info_required") && (
                 <>
                   {/* Primary: Issue / Approve */}
                   <button
@@ -673,6 +787,128 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
             </div>
           </div>
 
+          {/* ── Video consultation panel ── */}
+          {(() => {
+            const patientRequested = consult.video_call_requested;
+            const [offerVideo, setOfferVideo] = useState(false);
+            const [upliftAmount, setUpliftAmount] = useState("20");
+            const showPanel = patientRequested || offerVideo || !!hostRoomUrl;
+
+            return (
+              <div className="rounded-2xl bg-white/[0.04] ring-1 ring-white/10 overflow-hidden">
+                <div className="border-b border-white/10 px-5 py-3 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-sm font-semibold text-white">Video consultation</h2>
+                    <p className="mt-0.5 text-xs text-white/40">
+                      {patientRequested ? "Patient has requested a video call" : "Offer a video call uplift to this patient"}
+                    </p>
+                  </div>
+                  {/* If call not started yet */}
+                  {!hostRoomUrl && (
+                    <div className="flex items-center gap-2">
+                      {/* GP-initiated offer */}
+                      {!patientRequested && !offerVideo && (
+                        <button
+                          onClick={() => setOfferVideo(true)}
+                          disabled={status === "pending"}
+                          className="shrink-0 rounded-xl bg-white/5 px-3 py-2 text-xs font-medium text-white/50 ring-1 ring-white/10 transition-all hover:bg-white/10 hover:text-white/80 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          Offer video call
+                        </button>
+                      )}
+                      {/* Start call button — shown when patient requested OR GP chose to offer */}
+                      {(patientRequested || offerVideo) && (
+                        <button
+                          onClick={startVideoCall}
+                          disabled={videoLoading || status === "pending"}
+                          className="shrink-0 rounded-xl bg-blue-500/15 px-3 py-2 text-xs font-semibold text-blue-200 ring-1 ring-blue-500/25 transition-all hover:bg-blue-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          {videoLoading ? "Creating room…" : "Start video call"}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* GP offer flow — set uplift amount and notify patient */}
+                {!patientRequested && offerVideo && !hostRoomUrl && (
+                  <div className="border-b border-white/10 px-5 py-4 space-y-3">
+                    <p className="text-xs text-white/50">
+                      This patient did not request a video call. You can offer one as an uplift.
+                      Set the additional fee below — a message will be sent to the patient asking
+                      them to accept before you start the call.
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 ring-1 ring-white/10">
+                        <span className="text-sm text-white/50">€</span>
+                        <input
+                          type="number"
+                          value={upliftAmount}
+                          onChange={e => setUpliftAmount(e.target.value)}
+                          className="w-16 bg-transparent text-sm text-white outline-none"
+                          min="0"
+                        />
+                        <span className="text-xs text-white/30">uplift</span>
+                      </div>
+                      <button
+                        onClick={async () => {
+                          await sendMsg(
+                            `Your GP has reviewed your case and would like to offer a video consultation to discuss further. ` +
+                            `There is an additional fee of €${upliftAmount} for the video call. ` +
+                            `Please reply to confirm you'd like to proceed and we will send you a join link.`
+                          );
+                          setOfferVideo(false);
+                        }}
+                        className="rounded-xl bg-[#22c55e]/10 px-3 py-2 text-xs font-semibold text-[#86efac] ring-1 ring-[#22c55e]/25 transition-all hover:bg-[#22c55e]/20"
+                      >
+                        Send offer to patient
+                      </button>
+                      <button onClick={() => setOfferVideo(false)} className="text-xs text-white/30 hover:text-white/50">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Embedded call */}
+                {hostRoomUrl ? (
+                  <div>
+                    <iframe
+                      src={`${hostRoomUrl}?embed&floatSelf&skipMediaPermissionPrompt`}
+                      allow="camera; microphone; fullscreen; speaker-selection; display-capture"
+                      className="w-full"
+                      style={{ height: "420px", border: "none" }}
+                      title="Video consultation"
+                    />
+                    <div className="flex items-center justify-between gap-3 border-t border-white/10 px-4 py-3">
+                      <p className="text-xs text-white/35">Patient link sent via message</p>
+                      <button
+                        onClick={() => navigator.clipboard.writeText(patientRoomUrl ?? "")}
+                        className="text-xs text-blue-400 hover:text-blue-300"
+                      >
+                        Copy patient link
+                      </button>
+                    </div>
+                  </div>
+                ) : !offerVideo && !patientRequested ? (
+                  <div className="px-5 py-4">
+                    <p className="text-xs text-white/25">
+                      Click &ldquo;Offer video call&rdquo; to send the patient an uplift offer,
+                      or &ldquo;Start video call&rdquo; if they have already accepted.
+                    </p>
+                  </div>
+                ) : patientRequested && !offerVideo ? (
+                  <div className="px-5 py-4">
+                    <p className="text-xs text-white/35">
+                      Click &ldquo;Start video call&rdquo; to open the room. The patient will receive their join link via messages.
+                      {status === "pending" && " Claim this case first."}
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })()}
+
           {/* ── Messages ── */}
           <div className="rounded-2xl bg-white/[0.04] ring-1 ring-white/10">
             <div className="border-b border-white/10 px-5 py-3">
@@ -702,19 +938,25 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
                 })}
                 <div ref={msgEndRef} />
               </div>
-              <div className="mt-3 flex gap-2">
-                <input
-                  value={msgInput}
-                  onChange={(e) => setMsgInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMsg(); } }}
-                  placeholder="Message patient…"
-                  className="flex-1 rounded-xl bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none ring-1 ring-white/10 focus:ring-white/20 transition-all"
-                />
-                <button onClick={() => sendMsg()}
-                  className="rounded-xl bg-[#22c55e]/15 px-3.5 py-2 text-sm font-semibold text-[#86efac] ring-1 ring-[#22c55e]/25 transition-colors hover:bg-[#22c55e]/25">
-                  Send
-                </button>
-              </div>
+              {status === "pending" ? (
+                <p className="mt-3 rounded-xl border border-white/8 bg-white/4 px-3 py-2.5 text-xs text-white/35 text-center">
+                  Claim this case to send messages
+                </p>
+              ) : (
+                <div className="mt-3 flex gap-2">
+                  <input
+                    value={msgInput}
+                    onChange={(e) => setMsgInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMsg(); } }}
+                    placeholder="Message patient…"
+                    className="flex-1 rounded-xl bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none ring-1 ring-white/10 focus:ring-white/20 transition-all"
+                  />
+                  <button onClick={() => sendMsg()}
+                    className="rounded-xl bg-[#22c55e]/15 px-3.5 py-2 text-sm font-semibold text-[#86efac] ring-1 ring-[#22c55e]/25 transition-colors hover:bg-[#22c55e]/25">
+                    Send
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 

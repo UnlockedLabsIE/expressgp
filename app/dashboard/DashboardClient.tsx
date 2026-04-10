@@ -186,6 +186,11 @@ function ConsultationRow({ consult, position }: { consult: ConsultationRow; posi
           )}
           <p className={`text-xs ${overdue ? "text-amber-400" : "text-white/55"}`}>{formatRelativeTime(consult.created_at)}</p>
         </div>
+        {consult.payment_status === "unpaid" && (
+          <span className="mt-1 inline-flex items-center rounded-full bg-red-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-red-300 ring-1 ring-red-500/20">
+            Unpaid
+          </span>
+        )}
       </div>
     </div>
   );
