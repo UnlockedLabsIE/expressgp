@@ -236,10 +236,25 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
       body,
       is_read: false,
     });
+    // Notify patient via WhatsApp + email (fire-and-forget, non-blocking)
+    notifyPatient();
   }
 
-  /** Fire-and-forget WhatsApp message to the patient (if phone number available).
-   *  No-op until Bird WhatsApp channel is configured via BIRD_WHATSAPP_CHANNEL_ID. */
+  /** Pings the patient via WhatsApp + email to check their dashboard.
+   *  Both channels are no-ops until configured — safe to call at any time. */
+  function notifyPatient() {
+    if (!consult?.patient) return;
+    const { phone, email, first_name } = consult.patient;
+    fetch("/api/notify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone, email, firstName: first_name }),
+    }).catch((err) => console.error("[notify] failed:", err));
+  }
+
+  /** Fire-and-forget WhatsApp message to the patient with custom body
+   *  (used for video call offers where the message content differs from
+   *  the standard "new message" notification). */
   async function sendWhatsAppToPatient(body: string) {
     const phone = consult?.patient?.phone;
     if (!phone) return;
