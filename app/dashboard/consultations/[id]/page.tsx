@@ -140,9 +140,12 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
   const [redownload, setRedownload] = useState<(() => Promise<void>) | null>(null);
 
   // Video call
-  const [videoLoading, setVideoLoading] = useState(false);
-  const [hostRoomUrl, setHostRoomUrl]   = useState<string | null>(null);
+  const [videoLoading, setVideoLoading]     = useState(false);
+  const [hostRoomUrl, setHostRoomUrl]       = useState<string | null>(null);
   const [patientRoomUrl, setPatientRoomUrl] = useState<string | null>(null);
+  const [offerVideo, setOfferVideo]         = useState(false);
+  const [upliftAmount, setUpliftAmount]     = useState("20");
+  const [videoNote, setVideoNote]           = useState("");
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [msgInput, setMsgInput] = useState("");
@@ -235,6 +238,21 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
     });
   }
 
+  /** Fire-and-forget SMS to the patient's phone number (if available). */
+  async function sendSmsToPatient(body: string) {
+    const phone = consult?.patient?.phone;
+    if (!phone) return;
+    try {
+      await fetch("/api/sms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: phone, body }),
+      });
+    } catch (err) {
+      console.error("[SMS] failed to send:", err);
+    }
+  }
+
   // ── GP notes auto-save (on blur) ──────────────────────────────────────────
 
   async function saveNotes() {
@@ -254,8 +272,10 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
       const data = await res.json() as { hostRoomUrl: string; roomUrl: string };
       setHostRoomUrl(data.hostRoomUrl);
       setPatientRoomUrl(data.roomUrl);
-      // Notify patient with their link via message
-      await sendMsg(`Your GP is ready for your video consultation. Join here: ${data.roomUrl}`);
+      // Notify patient with their link via message and SMS
+      const videoMsg = `Your GP is ready for your video consultation. Join here: ${data.roomUrl}`;
+      await sendMsg(videoMsg);
+      await sendSmsToPatient(`ExpressGP: Your GP is ready for your video call. Join here: ${data.roomUrl}`);
     } finally {
       setVideoLoading(false);
     }
@@ -788,126 +808,133 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
           </div>
 
           {/* ── Video consultation panel ── */}
-          {(() => {
-            const patientRequested = consult.video_call_requested;
-            const [offerVideo, setOfferVideo] = useState(false);
-            const [upliftAmount, setUpliftAmount] = useState("20");
-            const showPanel = patientRequested || offerVideo || !!hostRoomUrl;
-
-            return (
-              <div className="rounded-2xl bg-white/[0.04] ring-1 ring-white/10 overflow-hidden">
-                <div className="border-b border-white/10 px-5 py-3 flex items-center justify-between">
-                  <div>
-                    <h2 className="text-sm font-semibold text-white">Video consultation</h2>
-                    <p className="mt-0.5 text-xs text-white/40">
-                      {patientRequested ? "Patient has requested a video call" : "Offer a video call uplift to this patient"}
-                    </p>
-                  </div>
-                  {/* If call not started yet */}
-                  {!hostRoomUrl && (
-                    <div className="flex items-center gap-2">
-                      {/* GP-initiated offer */}
-                      {!patientRequested && !offerVideo && (
-                        <button
-                          onClick={() => setOfferVideo(true)}
-                          disabled={status === "pending"}
-                          className="shrink-0 rounded-xl bg-white/5 px-3 py-2 text-xs font-medium text-white/50 ring-1 ring-white/10 transition-all hover:bg-white/10 hover:text-white/80 disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          Offer video call
-                        </button>
-                      )}
-                      {/* Start call button — shown when patient requested OR GP chose to offer */}
-                      {(patientRequested || offerVideo) && (
-                        <button
-                          onClick={startVideoCall}
-                          disabled={videoLoading || status === "pending"}
-                          className="shrink-0 rounded-xl bg-blue-500/15 px-3 py-2 text-xs font-semibold text-blue-200 ring-1 ring-blue-500/25 transition-all hover:bg-blue-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          {videoLoading ? "Creating room…" : "Start video call"}
-                        </button>
-                      )}
-                    </div>
+          <div className="rounded-2xl bg-white/[0.04] ring-1 ring-white/10 overflow-hidden">
+            <div className="border-b border-white/10 px-5 py-3 flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-white">Video consultation</h2>
+                <p className="mt-0.5 text-xs text-white/40">
+                  {consult.video_call_requested ? "Patient has requested a video call" : "Offer a video call uplift to this patient"}
+                </p>
+              </div>
+              {!hostRoomUrl && (
+                <div className="flex items-center gap-2">
+                  {!consult.video_call_requested && !offerVideo && (
+                    <button
+                      onClick={() => setOfferVideo(true)}
+                      disabled={status === "pending"}
+                      className="shrink-0 rounded-xl bg-white/5 px-3 py-2 text-xs font-medium text-white/50 ring-1 ring-white/10 transition-all hover:bg-white/10 hover:text-white/80 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Offer video call
+                    </button>
+                  )}
+                  {(consult.video_call_requested || offerVideo) && (
+                    <button
+                      onClick={startVideoCall}
+                      disabled={videoLoading || status === "pending"}
+                      className="shrink-0 rounded-xl bg-blue-500/15 px-3 py-2 text-xs font-semibold text-blue-200 ring-1 ring-blue-500/25 transition-all hover:bg-blue-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {videoLoading ? "Creating room…" : "Start video call"}
+                    </button>
                   )}
                 </div>
+              )}
+            </div>
 
-                {/* GP offer flow — set uplift amount and notify patient */}
-                {!patientRequested && offerVideo && !hostRoomUrl && (
-                  <div className="border-b border-white/10 px-5 py-4 space-y-3">
-                    <p className="text-xs text-white/50">
-                      This patient did not request a video call. You can offer one as an uplift.
-                      Set the additional fee below — a message will be sent to the patient asking
-                      them to accept before you start the call.
-                    </p>
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 ring-1 ring-white/10">
-                        <span className="text-sm text-white/50">€</span>
-                        <input
-                          type="number"
-                          value={upliftAmount}
-                          onChange={e => setUpliftAmount(e.target.value)}
-                          className="w-16 bg-transparent text-sm text-white outline-none"
-                          min="0"
-                        />
-                        <span className="text-xs text-white/30">uplift</span>
-                      </div>
-                      <button
-                        onClick={async () => {
-                          await sendMsg(
-                            `Your GP has reviewed your case and would like to offer a video consultation to discuss further. ` +
-                            `There is an additional fee of €${upliftAmount} for the video call. ` +
-                            `Please reply to confirm you'd like to proceed and we will send you a join link.`
-                          );
-                          setOfferVideo(false);
-                        }}
-                        className="rounded-xl bg-[#22c55e]/10 px-3 py-2 text-xs font-semibold text-[#86efac] ring-1 ring-[#22c55e]/25 transition-all hover:bg-[#22c55e]/20"
-                      >
-                        Send offer to patient
-                      </button>
-                      <button onClick={() => setOfferVideo(false)} className="text-xs text-white/30 hover:text-white/50">
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
+            {/* GP uplift offer form */}
+            {!consult.video_call_requested && offerVideo && !hostRoomUrl && (
+              <div className="border-b border-white/10 px-5 py-4 space-y-3">
+                <p className="text-xs text-white/50">
+                  Set the fee and add a note to the patient explaining why you&apos;d like to speak.
+                  This will be sent via the messages thread and emailed to them.
+                </p>
 
-                {/* Embedded call */}
-                {hostRoomUrl ? (
-                  <div>
-                    <iframe
-                      src={`${hostRoomUrl}?embed&floatSelf&skipMediaPermissionPrompt`}
-                      allow="camera; microphone; fullscreen; speaker-selection; display-capture"
-                      className="w-full"
-                      style={{ height: "420px", border: "none" }}
-                      title="Video consultation"
-                    />
-                    <div className="flex items-center justify-between gap-3 border-t border-white/10 px-4 py-3">
-                      <p className="text-xs text-white/35">Patient link sent via message</p>
-                      <button
-                        onClick={() => navigator.clipboard.writeText(patientRoomUrl ?? "")}
-                        className="text-xs text-blue-400 hover:text-blue-300"
-                      >
-                        Copy patient link
-                      </button>
-                    </div>
-                  </div>
-                ) : !offerVideo && !patientRequested ? (
-                  <div className="px-5 py-4">
-                    <p className="text-xs text-white/25">
-                      Click &ldquo;Offer video call&rdquo; to send the patient an uplift offer,
-                      or &ldquo;Start video call&rdquo; if they have already accepted.
-                    </p>
-                  </div>
-                ) : patientRequested && !offerVideo ? (
-                  <div className="px-5 py-4">
-                    <p className="text-xs text-white/35">
-                      Click &ldquo;Start video call&rdquo; to open the room. The patient will receive their join link via messages.
-                      {status === "pending" && " Claim this case first."}
-                    </p>
-                  </div>
-                ) : null}
+                {/* Fee */}
+                <div className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 ring-1 ring-white/10 w-fit">
+                  <span className="text-sm text-white/50">€</span>
+                  <input
+                    type="number"
+                    value={upliftAmount}
+                    onChange={e => setUpliftAmount(e.target.value)}
+                    className="w-16 bg-transparent text-sm text-white outline-none"
+                    min="0"
+                  />
+                  <span className="text-xs text-white/30">video call fee</span>
+                </div>
+
+                {/* GP note */}
+                <textarea
+                  value={videoNote}
+                  onChange={e => setVideoNote(e.target.value)}
+                  placeholder="Add a note to the patient — e.g. 'I'd like to discuss your symptoms in more detail before prescribing.'"
+                  rows={3}
+                  className="w-full rounded-xl bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-white/25 outline-none ring-1 ring-white/10 focus:ring-white/20 transition-all resize-none"
+                />
+
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={async () => {
+                      const note = videoNote.trim();
+                      const msg =
+                        `Your GP has reviewed your case and would like to offer a video consultation to discuss further.\n\n` +
+                        (note ? `${note}\n\n` : "") +
+                        `There is an additional fee of €${upliftAmount} for the video call.\n\n` +
+                        `To proceed, please log in to your ExpressGP dashboard to complete payment. ` +
+                        `Once payment is confirmed, your booking link will be made available to schedule a time slot.`;
+                      await sendMsg(msg);
+                      await sendSmsToPatient(
+                        `ExpressGP: Your GP would like to offer a video consultation (€${upliftAmount} fee). ` +
+                        `Log in to your ExpressGP dashboard to complete payment and book your slot.`
+                      );
+                      // Save the booking link and fee to the consultation so Fionn
+                      // can unlock it on the patient dashboard post-payment
+                      await supabase.from("consultations").update({
+                        video_call_url: `https://cal.com/expressgp/video-gp-consultation`,
+                        video_call_scheduled_at: null, // patient hasn't booked yet
+                      }).eq("id", id);
+                      setOfferVideo(false);
+                      setVideoNote("");
+                    }}
+                    className="rounded-xl bg-[#22c55e]/10 px-3 py-2 text-xs font-semibold text-[#86efac] ring-1 ring-[#22c55e]/25 transition-all hover:bg-[#22c55e]/20"
+                  >
+                    Send offer to patient
+                  </button>
+                  <button onClick={() => { setOfferVideo(false); setVideoNote(""); }} className="text-xs text-white/30 hover:text-white/50">
+                    Cancel
+                  </button>
+                </div>
               </div>
-            );
-          })()}
+            )}
+
+            {/* Embedded call or instructions */}
+            {hostRoomUrl ? (
+              <div>
+                <iframe
+                  src={`${hostRoomUrl}?embed&floatSelf&skipMediaPermissionPrompt`}
+                  allow="camera; microphone; fullscreen; speaker-selection; display-capture"
+                  className="w-full"
+                  style={{ height: "420px", border: "none" }}
+                  title="Video consultation"
+                />
+                <div className="flex items-center justify-between gap-3 border-t border-white/10 px-4 py-3">
+                  <p className="text-xs text-white/35">Patient link sent via message</p>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(patientRoomUrl ?? "")}
+                    className="text-xs text-blue-400 hover:text-blue-300"
+                  >
+                    Copy patient link
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="px-5 py-4">
+                <p className="text-xs text-white/25">
+                  {consult.video_call_requested
+                    ? `Click "Start video call" to open the room. The patient receives their join link via messages automatically.${status === "pending" ? " Claim this case first." : ""}`
+                    : `Click "Offer video call" to send the patient an uplift offer, or "Start video call" once they've accepted.`}
+                </p>
+              </div>
+            )}
+          </div>
 
           {/* ── Messages ── */}
           <div className="rounded-2xl bg-white/[0.04] ring-1 ring-white/10">

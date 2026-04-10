@@ -36,6 +36,39 @@ export async function getConsultations(): Promise<ConsultationRow[]> {
   return (data ?? []) as ConsultationRow[];
 }
 
+// ─── All consultations visible to this GP (pending + their own cases) ─────────
+export async function getAllConsultations(): Promise<ConsultationRow[]> {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  // Pending (unclaimed) + any case assigned to this GP
+  const [pending, mine] = await Promise.all([
+    supabase
+      .from("consultations")
+      .select(CONSULTATION_SELECT)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("consultations")
+      .select(CONSULTATION_SELECT)
+      .eq("partner_doctor_id", user.id)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  const combined = [...(pending.data ?? []), ...(mine.data ?? [])];
+  // Deduplicate by id (a pending case assigned to this GP would appear in both)
+  const seen = new Set<string>();
+  const unique = combined.filter(c => {
+    if (seen.has(c.id)) return false;
+    seen.add(c.id);
+    return true;
+  });
+  // Sort newest first
+  unique.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  return unique as ConsultationRow[];
+}
+
 // ─── Active cases — claimed by the current GP (under_review / more_info_required)
 export async function getActiveCases(): Promise<ConsultationRow[]> {
   const supabase = await createServerSupabaseClient();

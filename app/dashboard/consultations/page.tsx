@@ -1,9 +1,9 @@
 import { unstable_noStore as noStore } from "next/cache";
-import { getConsultations } from "@/lib/queries";
+import { getAllConsultations } from "@/lib/queries";
 import ConsultationsClient from "./ConsultationsClient";
 
 export default async function ConsultationsPage() {
   noStore();
-  const consultations = await getConsultations();
+  const consultations = await getAllConsultations();
   return <ConsultationsClient consultations={consultations} />;
 }
