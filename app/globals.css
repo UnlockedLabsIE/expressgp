@@ -1,8 +1,24 @@
 @import "tailwindcss";
 
+/* ── Design tokens ───────────────────────────────────────────────────────────
+   Single source of truth for the ExpressGP colour system.
+   Navy + green — no light/dark switching, always dark.
+────────────────────────────────────────────────────────────────────────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg-base:      #0f1729;   /* page background */
+  --bg-surface:   #151f35;   /* card / panel surface */
+  --bg-elevated:  #1a2540;   /* dropdown / hover surface */
+  --border:       rgba(255, 255, 255, 0.09);
+  --text-primary: #f8fafc;
+  --text-muted:   rgba(255, 255, 255, 0.45);
+  --accent-green: #22c55e;
+  --accent-amber: #f59e0b;
+
+  /* Keep these for any Tailwind bg-background / text-foreground utilities */
+  --background: var(--bg-base);
+  --foreground: var(--text-primary);
+
+  --font-sans: var(--font-jakarta);
 }
 
 @theme inline {
@@ -11,15 +27,28 @@
   --font-sans: var(--font-jakarta);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ── Base styles ─────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: dark;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Ensure no flash of white on route transitions */
+html,
+body,
+#__next {
+  min-height: 100%;
 }

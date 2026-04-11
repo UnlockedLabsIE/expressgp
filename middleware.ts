@@ -32,7 +32,7 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  // Unauthenticated user trying to reach a protected route → send to /login
+  // ── GP dashboard guard ──────────────────────────────────────────────────────
   if (!user && pathname.startsWith("/dashboard")) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
@@ -40,17 +40,48 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Authenticated user hitting /login → send straight to the dashboard
-  if (user && pathname === "/login") {
-    const dashboardUrl = request.nextUrl.clone();
-    dashboardUrl.pathname = "/dashboard";
-    return NextResponse.redirect(dashboardUrl);
+  // Authenticated user hitting / → send to /login (portal choice handled there)
+  if (user && pathname === "/") {
+    const loginUrl = request.nextUrl.clone();
+    loginUrl.pathname = "/login";
+    return NextResponse.redirect(loginUrl);
+  }
+
+  // ── Admin portal guard ──────────────────────────────────────────────────────
+  if (pathname.startsWith("/admin") && pathname !== "/admin/login") {
+    if (!user) {
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = "/admin/login";
+      return NextResponse.redirect(loginUrl);
+    }
+
+    // Call the is_admin() SECURITY DEFINER function via the authenticated session.
+    // Returns true if the user has an active row in admin_users.
+    const { data: isAdmin, error } = await supabase.rpc("is_admin", {
+      uid: user.id,
+    });
+
+    if (error || !isAdmin) {
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = "/admin/login";
+      loginUrl.searchParams.set("error", "access_denied");
+      return NextResponse.redirect(loginUrl);
+    }
+  }
+
+  // Redirect authenticated admin away from /admin/login
+  if (user && pathname === "/admin/login") {
+    const { data: isAdmin } = await supabase.rpc("is_admin", { uid: user.id });
+    if (isAdmin) {
+      const adminUrl = request.nextUrl.clone();
+      adminUrl.pathname = "/admin";
+      return NextResponse.redirect(adminUrl);
+    }
   }
 
   return supabaseResponse;
 }
 
 export const config = {
-  // Run on every route except Next.js internals and static assets
   matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.png$).*)"],
 };

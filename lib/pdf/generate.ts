@@ -10,15 +10,17 @@
 import { pdf } from "@react-pdf/renderer";
 import { createElement } from "react";
 
-import { SickNotePDF }       from "./SickNote";
-import { PrescriptionPDF }   from "./Prescription";
-import { ReferralLetterPDF } from "./ReferralLetter";
-import { MedicalCertPDF }    from "./MedicalCert";
+import { SickNotePDF }         from "./SickNote";
+import { PrescriptionPDF }     from "./Prescription";
+import { ReferralLetterPDF }   from "./ReferralLetter";
+import { MedicalCertPDF }      from "./MedicalCert";
+import { GenericDocumentPDF }  from "./GenericDocument";
 
-import type { SickNoteData }      from "./SickNote";
-import type { PrescriptionData }  from "./Prescription";
-import type { ReferralData }      from "./ReferralLetter";
-import type { MedicalCertData }   from "./MedicalCert";
+import type { SickNoteData }         from "./SickNote";
+import type { PrescriptionData }     from "./Prescription";
+import type { ReferralData }         from "./ReferralLetter";
+import type { MedicalCertData }      from "./MedicalCert";
+import type { GenericDocumentData }  from "./GenericDocument";
 
 // ─── Download helper ──────────────────────────────────────────────────────────
 
@@ -59,4 +61,10 @@ export async function downloadMedicalCert(d: MedicalCertData) {
   const doc  = createElement(MedicalCertPDF, { d });
   const blob = await pdf(doc).toBlob();
   triggerDownload(blob, safeFilename(`MedCert_${d.patientName}`, d.consultationId.slice(0, 8)));
+}
+
+export async function downloadDocument(d: GenericDocumentData) {
+  const doc  = createElement(GenericDocumentPDF, { d });
+  const blob = await pdf(doc).toBlob();
+  triggerDownload(blob, safeFilename(`${d.typeLabel.replace(/\s+/g, "")}_${d.patientName}`, d.ref));
 }

@@ -51,37 +51,32 @@ function formatDateTime(iso: string | null): string {
 
 // ─── Primitives ───────────────────────────────────────────────────────────────
 
-function ToastList({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: number) => void }) {
+function ToastItem({ t, onDismiss }: { t: Toast; onDismiss: (id: number) => void }) {
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2" aria-live="polite">
-      {toasts.map((t) => (
-        <div
-          key={t.id}
-          className={[
-            "flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium shadow-xl ring-1",
-            t.type === "success"
-              ? "bg-[#0f1729] text-[#86efac] ring-[#22c55e]/40"
-              : "bg-[#0f1729] text-red-300 ring-red-500/40",
-          ].join(" ")}
-        >
-          {t.type === "success" ? (
-            <svg className="h-4 w-4 shrink-0 text-[#22c55e]" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path d="M20 6 9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          ) : (
-            <svg className="h-4 w-4 shrink-0 text-red-400" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
-              <path d="M12 8v4m0 4h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-          )}
-          {t.message}
-          <button onClick={() => onDismiss(t.id)} className="ml-1 text-white/35 hover:text-white/70" aria-label="Dismiss">
-            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </button>
-        </div>
-      ))}
+    <div
+      className={[
+        "flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium ring-1",
+        t.type === "success"
+          ? "bg-[#22c55e]/10 text-[#86efac] ring-[#22c55e]/30"
+          : "bg-red-500/10 text-red-300 ring-red-500/30",
+      ].join(" ")}
+    >
+      {t.type === "success" ? (
+        <svg className="h-4 w-4 shrink-0 text-[#22c55e]" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <path d="M20 6 9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      ) : (
+        <svg className="h-4 w-4 shrink-0 text-red-400" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M12 8v4m0 4h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      )}
+      <span className="flex-1">{t.message}</span>
+      <button onClick={() => onDismiss(t.id)} className="ml-1 shrink-0 text-white/35 hover:text-white/70 transition-colors" aria-label="Dismiss">
+        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      </button>
     </div>
   );
 }
@@ -93,14 +88,17 @@ function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (
       aria-checked={checked}
       disabled={disabled}
       onClick={() => onChange(!checked)}
+      style={{ backgroundColor: checked ? "#22c55e" : "#64748b", width: "44px", height: "24px" }}
       className={[
-        "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
-        "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#22c55e]",
-        checked ? "bg-[#22c55e]" : "bg-white/20",
+        "relative inline-flex items-center shrink-0 rounded-full px-0.5 transition-colors duration-200 outline-none",
+        "focus-visible:ring-2 focus-visible:ring-[#22c55e] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1729]",
         disabled ? "cursor-not-allowed opacity-40" : "cursor-pointer",
       ].join(" ")}
     >
-      <span className={["inline-block h-4 w-4 rounded-full bg-white shadow transition-transform", checked ? "translate-x-6" : "translate-x-1"].join(" ")} />
+      <span
+        style={{ transform: checked ? "translateX(20px)" : "translateX(0)" }}
+        className="block h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200"
+      />
     </button>
   );
 }
@@ -195,8 +193,8 @@ export default function SettingsClient({ doctor, notifPrefs, userEmail, lastSign
 
   const toast = useCallback((message: string, type: "success" | "error" = "success") => {
     const id = ++toastRef.current;
-    setToasts((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4500);
+    setToasts([{ id, message, type }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000);
   }, []);
 
   const dismissToast = useCallback((id: number) => setToasts((prev) => prev.filter((t) => t.id !== id)), []);
@@ -377,8 +375,6 @@ export default function SettingsClient({ doctor, notifPrefs, userEmail, lastSign
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <>
-      <ToastList toasts={toasts} onDismiss={dismissToast} />
-
       {/* ── Page header + tab bar ── */}
       <header className="sticky top-0 z-10 border-b border-white/10 bg-[#0f1729]/85 px-5 pb-0 pt-6 backdrop-blur">
         <p className="mb-4 text-xl font-light tracking-[0.04em] text-white">Settings</p>
@@ -398,6 +394,14 @@ export default function SettingsClient({ doctor, notifPrefs, userEmail, lastSign
             </button>
           ))}
         </div>
+        {/* Notification strip — lives inside the sticky header, always clear of content */}
+        {toasts.length > 0 && (
+          <div className="border-t border-white/10 py-2 space-y-1" aria-live="polite">
+            {toasts.map((t) => (
+              <ToastItem key={t.id} t={t} onDismiss={dismissToast} />
+            ))}
+          </div>
+        )}
       </header>
 
       {/* ── Content ── */}
