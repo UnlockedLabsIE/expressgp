@@ -13,6 +13,10 @@ type ThreadPatient = {
   last_name: string;
 };
 
+// GDPR data minimisation: thread list carries metadata only — no message body.
+// Full message bodies are fetched on demand when a thread is opened.
+type ThreadMessage = Pick<Message, "id" | "sender_type" | "is_read" | "created_at">;
+
 type Thread = {
   id: string;                  // consultation id
   service_type: string;
@@ -20,7 +24,7 @@ type Thread = {
   status: string;
   created_at: string;
   patient: ThreadPatient;
-  messages: Message[];
+  messages: ThreadMessage[];
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -108,10 +112,9 @@ function ThreadRow({
             </span>
           </div>
 
-          {lastMsg && (
-            <p className={`mt-1 text-xs truncate ${unread > 0 ? "text-white/60" : "text-white/30"}`}>
-              {lastMsg.sender_type === "partner_doctor" ? "You: " : ""}
-              {lastMsg.body}
+          {unread > 0 && (
+            <p className="mt-1 text-xs font-medium text-blue-300">
+              {unread === 1 ? "New message" : `${unread} new messages`}
             </p>
           )}
         </div>
@@ -177,20 +180,41 @@ export default function MessagesClient({ isAcceptingCases = true }: { isAcceptin
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
 
+    // GDPR Art.5(1)(c) — data minimisation. List view pulls metadata only;
+    // message bodies are fetched in the effect below once a thread is opened.
     const { data, error } = await supabase
       .from("consultations")
       .select(`
         id, service_type, service_subtype, status, created_at,
         patient:patients ( id, first_name, last_name ),
-        messages ( id, body, sender_type, is_read, created_at, consultation_id, sender_id )
+        messages ( id, sender_type, is_read, created_at )
       `)
       .eq("partner_doctor_id", user.id)
       .order("created_at", { ascending: false });
 
     if (error) { console.error(error); setLoading(false); return; }
 
+    type Row = {
+      id: string;
+      service_type: string;
+      service_subtype: string | null;
+      status: string;
+      created_at: string;
+      patient: ThreadPatient | ThreadPatient[];
+      messages: ThreadMessage[] | null;
+    };
+    const normalized: Thread[] = (data ?? []).map((row: Row) => ({
+      id: row.id,
+      service_type: row.service_type,
+      service_subtype: row.service_subtype,
+      status: row.status,
+      created_at: row.created_at,
+      patient: Array.isArray(row.patient) ? row.patient[0]! : row.patient,
+      messages: Array.isArray(row.messages) ? row.messages : [],
+    }));
+
     // Only show threads that have at least one message
-    const withMsgs = ((data ?? []) as Thread[]).filter(t => t.messages.length > 0);
+    const withMsgs = normalized.filter(t => t.messages.length > 0);
 
     // Sort by latest message timestamp desc
     withMsgs.sort((a, b) => {
@@ -210,22 +234,36 @@ export default function MessagesClient({ isAcceptingCases = true }: { isAcceptin
   useEffect(() => {
     if (!selectedId) return;
 
-    const thread = threads.find(t => t.id === selectedId);
-    if (!thread) return;
+    let cancelled = false;
 
-    // Sort messages chronologically
-    const sorted = [...thread.messages].sort(
-      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    );
-    setMessages(sorted);
+    // TODO(audit): opening a thread is a material clinical-data view event
+    // (ISO 27001 / GDPR Art.32). Insert an `audit_logs` row here with
+    // action = "clinical_messages_viewed", table_name = "consultations",
+    // record_id = selectedId. Mirrors the pattern in
+    // app/dashboard/consultations/[id]/page.tsx's "clinical_data_viewed" log.
 
-    // Mark all patient messages as read
+    // Fetch full message bodies for this thread only — not preloaded for the list.
+    (async () => {
+      const { data, error } = await supabase
+        .from("messages")
+        .select("*")
+        .eq("consultation_id", selectedId)
+        .order("created_at", { ascending: true });
+
+      if (cancelled) return;
+      if (error) { console.error(error); return; }
+      setMessages((data ?? []) as Message[]);
+      setTimeout(() => msgEndRef.current?.scrollIntoView({ behavior: "instant" }), 50);
+    })();
+
+    // Mark all patient messages as read (optimistic update on the list metadata)
     supabase.from("messages")
       .update({ is_read: true })
       .eq("consultation_id", selectedId)
       .eq("sender_type", "patient")
       .eq("is_read", false)
       .then(() => {
+        if (cancelled) return;
         setThreads(prev => prev.map(t =>
           t.id === selectedId
             ? { ...t, messages: t.messages.map(m => m.sender_type === "patient" ? { ...m, is_read: true } : m) }
@@ -233,7 +271,7 @@ export default function MessagesClient({ isAcceptingCases = true }: { isAcceptin
         ));
       });
 
-    setTimeout(() => msgEndRef.current?.scrollIntoView({ behavior: "instant" }), 50);
+    return () => { cancelled = true; };
   }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Real-time subscription ───────────────────────────────────────────────
@@ -243,17 +281,22 @@ export default function MessagesClient({ isAcceptingCases = true }: { isAcceptin
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" },
         (payload) => {
           const msg = payload.new as Message;
-          // Update thread list
+          // Thread list gets metadata only — never store body in the list state.
+          const meta: ThreadMessage = {
+            id: msg.id,
+            sender_type: msg.sender_type,
+            is_read: msg.is_read,
+            created_at: msg.created_at,
+          };
           setThreads(prev => prev.map(t =>
             t.id === msg.consultation_id
-              ? { ...t, messages: [...t.messages, msg] }
+              ? { ...t, messages: [...t.messages, meta] }
               : t
           ));
-          // If this thread is open, append to messages
+          // If this thread is open, the detail pane keeps the full message.
           if (msg.consultation_id === selectedId) {
             setMessages(prev => [...prev, msg]);
             setTimeout(() => msgEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
-            // Mark read immediately
             supabase.from("messages").update({ is_read: true }).eq("id", msg.id);
           }
         })
