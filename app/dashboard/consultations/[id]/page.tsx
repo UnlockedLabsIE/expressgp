@@ -1,10 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useRef, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase";
 import type { ConsultationDetail } from "@/lib/queries";
-import type { Message } from "@/types";
+import type { Document, Message, Prescription } from "@/types";
+
+type CaseMeta = { created_at: string; service_type: string | null };
+type SiblingConsultation = { id: string; status: string; created_at: string; service_type: string | null };
+type ClinicalRxRow = Prescription & { caseCreatedAt: string; caseServiceType: string | null; isThisCase: boolean };
+type ClinicalDocRow = Document & { caseCreatedAt: string; caseServiceType: string | null; isThisCase: boolean };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -116,7 +121,7 @@ function Skeleton() {
 
 export default function ConsultationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const [consult, setConsult]       = useState<ConsultationDetail | null>(null);
   const [loading, setLoading]       = useState(true);
@@ -151,6 +156,67 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
   const [messages, setMessages] = useState<Message[]>([]);
   const [msgInput, setMsgInput] = useState("");
   const msgEndRef = useRef<HTMLDivElement>(null);
+
+  const [clinicalRx, setClinicalRx] = useState<ClinicalRxRow[]>([]);
+  const [clinicalDocs, setClinicalDocs] = useState<ClinicalDocRow[]>([]);
+  const [siblingCases, setSiblingCases] = useState<SiblingConsultation[]>([]);
+
+  /** All prescriptions/documents for this patient across consultations (RLS: shared in-platform record). */
+  const loadSharedPatientRecord = useCallback(async (patientId: string | undefined, caseId: string) => {
+    if (!patientId) {
+      setClinicalRx([]);
+      setClinicalDocs([]);
+      setSiblingCases([]);
+      return;
+    }
+    const { data: cases } = await supabase
+      .from("consultations")
+      .select("id, status, created_at, service_type")
+      .eq("patient_id", patientId)
+      .order("created_at", { ascending: false });
+
+    const caseList = (cases ?? []) as SiblingConsultation[];
+    const meta = new Map<string, CaseMeta>(
+      caseList.map((c) => [c.id, { created_at: c.created_at, service_type: c.service_type }]),
+    );
+    setSiblingCases(caseList.filter((c) => c.id !== caseId));
+    const caseIds = caseList.map((c) => c.id);
+    if (caseIds.length === 0) {
+      setClinicalRx([]);
+      setClinicalDocs([]);
+      return;
+    }
+
+    const [{ data: rxs }, { data: docs }] = await Promise.all([
+      supabase.from("prescriptions").select("*").in("consultation_id", caseIds).order("created_at", { ascending: false }),
+      supabase.from("documents").select("*").in("consultation_id", caseIds).order("created_at", { ascending: false }),
+    ]);
+
+    const enrichRx = (rows: Prescription[] | null): ClinicalRxRow[] =>
+      (rows ?? []).map((row) => {
+        const m = meta.get(row.consultation_id);
+        return {
+          ...row,
+          caseCreatedAt: m?.created_at ?? "",
+          caseServiceType: m?.service_type ?? null,
+          isThisCase: row.consultation_id === caseId,
+        };
+      });
+
+    const enrichDoc = (rows: Document[] | null): ClinicalDocRow[] =>
+      (rows ?? []).map((row) => {
+        const m = meta.get(row.consultation_id);
+        return {
+          ...row,
+          caseCreatedAt: m?.created_at ?? "",
+          caseServiceType: m?.service_type ?? null,
+          isThisCase: row.consultation_id === caseId,
+        };
+      });
+
+    setClinicalRx(enrichRx(rxs));
+    setClinicalDocs(enrichDoc(docs));
+  }, [supabase]);
 
   // ── Fetch + auto-claim ────────────────────────────────────────────────────
 
@@ -223,10 +289,12 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
         });
       }
 
+      await loadSharedPatientRecord(data.patient_id ?? undefined, id);
+
       setLoading(false);
     }
     load();
-  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [id, loadSharedPatientRecord]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Real-time messages ────────────────────────────────────────────────────
 
@@ -415,6 +483,7 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
 
       setStatus("approved");
       setStep("done");
+      await loadSharedPatientRecord(consult!.patient_id ?? undefined, id);
     } finally {
       setIssuing(false);
     }
@@ -627,6 +696,80 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
               className="w-full resize-none rounded-xl bg-[#080e1c] px-4 py-3 text-sm leading-relaxed text-white placeholder:text-white/25 outline-none ring-1 ring-white/10 focus:ring-white/20 transition-all"
             />
           </Card>
+
+          {(siblingCases.length > 0 || clinicalRx.length > 0 || clinicalDocs.length > 0) && (
+            <Card
+              title="In-platform record (this patient)"
+              flags={<span className="text-[10px] text-white/30 uppercase tracking-wider">ExpressGP · RLS shared access</span>}
+            >
+              <p className="mb-4 text-xs leading-relaxed text-white/45">
+                Prescriptions and documents issued on ExpressGP for this patient, including other consultations you are permitted to view. Messages stay in each case thread.
+              </p>
+              {siblingCases.length > 0 && (
+                <div className="mb-4">
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-white/35">Other consultations</p>
+                  <ul className="space-y-1.5">
+                    {siblingCases.map((c) => (
+                      <li key={c.id}>
+                        <Link
+                          href={`/dashboard/consultations/${c.id}`}
+                          className="text-xs text-blue-300/90 underline-offset-2 hover:text-blue-200 hover:underline"
+                        >
+                          {fmtFull(c.created_at)} · {(c.service_type ?? "").replace(/_/g, " ") || "Case"} · {c.status.replace(/_/g, " ")}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {clinicalRx.length > 0 && (
+                <div className="mb-4">
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-white/35">Prescriptions</p>
+                  <ul className="space-y-2">
+                    {clinicalRx.map((row) => (
+                      <li
+                        key={row.id}
+                        className="rounded-lg bg-white/[0.03] px-3 py-2 text-xs ring-1 ring-white/8"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${row.isThisCase ? "bg-blue-500/20 text-blue-200" : "bg-white/10 text-white/50"}`}>
+                            {row.isThisCase ? "This case" : "Other case"}
+                          </span>
+                          <span className="text-white/55">{fmtFull(row.caseCreatedAt)}</span>
+                        </div>
+                        <p className="mt-1 font-medium text-white/85">{row.medication}</p>
+                        <p className="mt-0.5 text-white/45">
+                          {[row.dosage, row.frequency, row.duration].filter(Boolean).join(" · ") || "—"}
+                          {row.pharmacy_name ? ` · ${row.pharmacy_name}` : ""}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {clinicalDocs.length > 0 && (
+                <div>
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-white/35">Documents issued</p>
+                  <ul className="space-y-2">
+                    {clinicalDocs.map((row) => (
+                      <li
+                        key={row.id}
+                        className="rounded-lg bg-white/[0.03] px-3 py-2 text-xs ring-1 ring-white/8"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${row.isThisCase ? "bg-blue-500/20 text-blue-200" : "bg-white/10 text-white/50"}`}>
+                            {row.isThisCase ? "This case" : "Other case"}
+                          </span>
+                          <span className="text-white/55">{fmtFull(row.caseCreatedAt)}</span>
+                        </div>
+                        <p className="mt-1 font-medium capitalize text-white/85">{row.type.replace(/_/g, " ")}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </Card>
+          )}
         </div>
 
         {/* RIGHT */}

@@ -238,9 +238,10 @@ export default function DashboardPage({ consultations, activeCases, isAcceptingC
             <path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           <p className="text-sm text-red-300">
-            You are not currently accepting new consultations.{" "}
-            <a href="/dashboard/settings#availability" className="underline underline-offset-2 hover:text-red-100">
-              Update in Settings
+            You are offline for <strong className="font-semibold">new</strong> cases. Patients can still submit — they are advised the clinical team will respond by the{" "}
+            <strong className="font-semibold">next working day</strong>. You can still complete cases already assigned to you.{" "}
+            <a href="/dashboard/settings" className="underline underline-offset-2 hover:text-red-100">
+              Change in Settings
             </a>
           </p>
         </div>

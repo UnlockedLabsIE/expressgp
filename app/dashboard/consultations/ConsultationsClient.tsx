@@ -24,7 +24,13 @@ const STATUS_BADGE: Record<string, string> = {
   cancelled:          "bg-slate-500/15 text-slate-300 ring-1 ring-slate-500/25",
 };
 
-export default function ConsultationsClient({ consultations }: { consultations: ConsultationRow[] }) {
+export default function ConsultationsClient({
+  consultations,
+  isAcceptingCases = true,
+}: {
+  consultations: ConsultationRow[];
+  isAcceptingCases?: boolean;
+}) {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter]     = useState<string>("all");
   const [query, setQuery]               = useState("");
@@ -44,6 +50,16 @@ export default function ConsultationsClient({ consultations }: { consultations: 
 
   return (
     <>
+      {!isAcceptingCases && (
+        <div className="flex items-center gap-3 border-b border-amber-500/25 bg-amber-500/10 px-5 py-2.5">
+          <p className="text-xs text-amber-100/90">
+            You are offline for new cases. Patients are told the team will respond by the next working day; you can still work assigned cases.{" "}
+            <Link href="/dashboard/settings" className="font-medium underline underline-offset-2 hover:text-white">
+              Settings
+            </Link>
+          </p>
+        </div>
+      )}
       <header className="sticky top-0 z-10 border-b border-white/10 bg-[#0f1729]/85 px-5 pb-4 pt-6 backdrop-blur">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <p className="hidden text-xl font-light tracking-[0.04em] text-white sm:block">Clinical Dashboard</p>

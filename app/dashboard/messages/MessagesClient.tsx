@@ -160,7 +160,7 @@ function DateSep({ iso }: { iso: string }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function MessagesClient() {
+export default function MessagesClient({ isAcceptingCases = true }: { isAcceptingCases?: boolean }) {
   const supabase = createClient();
 
   const [threads, setThreads]       = useState<Thread[]>([]);
@@ -306,7 +306,18 @@ export default function MessagesClient() {
   // ─────────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-[calc(100vh-0px)] overflow-hidden bg-[#0f1729]">
+    <div className="flex h-[calc(100vh-0px)] flex-col overflow-hidden bg-[#0f1729]">
+      {!isAcceptingCases && (
+        <div className="shrink-0 border-b border-amber-500/25 bg-amber-500/10 px-4 py-2">
+          <p className="text-[11px] text-amber-100/90">
+            Offline for new cases — patients are told next working day response.{" "}
+            <Link href="/dashboard/settings" className="font-medium underline underline-offset-2 hover:text-white">
+              Settings
+            </Link>
+          </p>
+        </div>
+      )}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
 
       {/* ── Thread list ─────────────────────────────────────────────────── */}
       <div className="flex w-72 shrink-0 flex-col border-r border-white/8">
@@ -439,6 +450,7 @@ export default function MessagesClient() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

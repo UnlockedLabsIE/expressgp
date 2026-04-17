@@ -1,7 +1,11 @@
 import { unstable_noStore } from "next/cache";
+import { getPartnerDoctor } from "@/lib/queries";
 import MessagesClient from "./MessagesClient";
 
-export default function MessagesPage() {
+export default async function MessagesPage() {
   unstable_noStore();
-  return <MessagesClient />;
+  const doctor = await getPartnerDoctor();
+  return (
+    <MessagesClient isAcceptingCases={doctor?.is_accepting_cases ?? true} />
+  );
 }

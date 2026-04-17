@@ -103,6 +103,8 @@ export async function getActiveCases(): Promise<ConsultationRow[]> {
 }
 
 // ─── Fetch a single consultation with all related data ────────────────────────
+// Cross-case prescriptions/documents for the same patient are loaded on the
+// consultation detail page (client) so RLS (`shared_clinical_record_rls.sql`) can scope visibility.
 export async function getConsultationById(id: string): Promise<ConsultationDetail | null> {
   const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase
