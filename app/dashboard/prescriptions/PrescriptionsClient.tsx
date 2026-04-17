@@ -16,6 +16,7 @@ type RxConsultation = {
   doctor: RxDoctor;
 } | null;
 
+// Full prescription row — used by the detail slide-over only.
 export type PrescriptionRow = {
   id: string;
   consultation_id: string;
@@ -31,6 +32,30 @@ export type PrescriptionRow = {
   consultation: RxConsultation;
 };
 
+// GDPR data minimisation: the list view fetches only what's displayed.
+// Medication, dosage, frequency, duration, pharmacy, patient DOB, and GP IMC
+// number are intentionally absent — they are fetched on demand when a
+// prescription is opened. Keep `healthmail_reference` and `issued_at` only
+// because they drive the Status badge.
+type RxListDoctor = { first_name: string; last_name: string } | null;
+type RxListPatient = { first_name: string; last_name: string } | null;
+type RxListConsultation = {
+  id: string;
+  service_type: string;
+  partner_doctor_id: string | null;
+  patient: RxListPatient;
+  doctor: RxListDoctor;
+} | null;
+
+export type PrescriptionListRow = {
+  id: string;
+  consultation_id: string;
+  healthmail_reference: string | null;
+  issued_at: string | null;
+  created_at: string;
+  consultation: RxListConsultation;
+};
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function irishDate(iso: string | null) {
@@ -44,7 +69,7 @@ function rxRef(id: string) {
   return `RX-${id.slice(0, 8).toUpperCase()}`;
 }
 
-function deriveStatus(rx: PrescriptionRow): "draft" | "issued" | "dispensed" | "expired" {
+function deriveStatus(rx: { issued_at: string | null; healthmail_reference: string | null }): "draft" | "issued" | "dispensed" | "expired" {
   if (!rx.issued_at) return "draft";
   if (rx.healthmail_reference) return "dispensed";
   const sixMonthsAgo = new Date();
@@ -58,12 +83,12 @@ function deriveType(serviceType: string | undefined): "standard" | "glp1" | "rep
   return "standard";
 }
 
-function patientName(p: RxPatient) {
+function patientName(p: { first_name: string; last_name: string } | null) {
   if (!p) return "Unknown";
   return `${p.first_name} ${p.last_name}`;
 }
 
-function gpName(d: RxDoctor) {
+function gpName(d: { first_name: string; last_name: string } | null) {
   if (!d) return "—";
   return `Dr. ${d.first_name} ${d.last_name}`;
 }
@@ -98,13 +123,18 @@ function TypeBadge({ type }: { type: string }) {
 
 // ─── Reusable prescription list ───────────────────────────────────────────────
 // Exported so it can be embedded in patient detail and consultation pages.
+//
+// GDPR minimisation: this list shows metadata only — patient name, date
+// issued, GP, status, and an Actions column. Clinical content (medication,
+// dosage, pharmacy, etc.) is only visible after the GP opens the detail
+// slide-over, which triggers a separate fetch for that single prescription.
 
 export function PrescriptionList({
   prescriptions,
   onSelect,
 }: {
-  prescriptions: PrescriptionRow[];
-  onSelect: (rx: PrescriptionRow) => void;
+  prescriptions: PrescriptionListRow[];
+  onSelect: (rx: PrescriptionListRow) => void;
 }) {
   if (prescriptions.length === 0) {
     return (
@@ -120,11 +150,11 @@ export function PrescriptionList({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[900px] text-sm">
+      <table className="w-full min-w-[640px] text-sm">
         <thead>
           <tr className="border-b border-white/8">
-            {["Patient", "DOB", "Medication", "Dosage", "Frequency", "Duration", "Pharmacy", "Issued", "GP", "Status"].map(h => (
-              <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white/35 first:pl-5 last:pr-5">
+            {["Patient", "Date Issued", "GP", "Status", ""].map((h, i) => (
+              <th key={i} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-white/35 first:pl-5 last:pr-5">
                 {h}
               </th>
             ))}
@@ -147,16 +177,19 @@ export function PrescriptionList({
                   </div>
                   <p className="mt-0.5 text-[11px] text-white/35">{rxRef(rx.id)}</p>
                 </td>
-                <td className="px-4 py-3.5 text-white/60">{irishDate(rx.consultation?.patient?.dob ?? null)}</td>
-                <td className="px-4 py-3.5 font-medium text-white/90">{rx.medication}</td>
-                <td className="px-4 py-3.5 text-white/60">{rx.dosage ?? "—"}</td>
-                <td className="px-4 py-3.5 text-white/60">{rx.frequency ?? "—"}</td>
-                <td className="px-4 py-3.5 text-white/60">{rx.duration ?? "—"}</td>
-                <td className="px-4 py-3.5 text-white/60">{rx.pharmacy_name ?? "—"}</td>
                 <td className="px-4 py-3.5 text-white/60 whitespace-nowrap">{irishDate(rx.issued_at)}</td>
                 <td className="px-4 py-3.5 text-white/60 whitespace-nowrap">{gpName(rx.consultation?.doctor ?? null)}</td>
-                <td className="pr-5 py-3.5">
+                <td className="px-4 py-3.5">
                   <StatusBadge status={status} />
+                </td>
+                <td className="pr-5 py-3.5 text-right">
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onSelect(rx); }}
+                    className="rounded-lg bg-white/5 px-3 py-1.5 text-xs font-medium text-white/70 ring-1 ring-white/10 transition-all hover:bg-white/10 hover:text-white"
+                  >
+                    View →
+                  </button>
                 </td>
               </tr>
             );
@@ -355,7 +388,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 // ─── Stats bar ────────────────────────────────────────────────────────────────
 
-function StatsBar({ prescriptions }: { prescriptions: PrescriptionRow[] }) {
+function StatsBar({ prescriptions }: { prescriptions: PrescriptionListRow[] }) {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
@@ -402,7 +435,7 @@ function StatsBar({ prescriptions }: { prescriptions: PrescriptionRow[] }) {
 // ─── Main client component ────────────────────────────────────────────────────
 
 export default function PrescriptionsClient() {
-  const [prescriptions, setPrescriptions] = useState<PrescriptionRow[]>([]);
+  const [prescriptions, setPrescriptions] = useState<PrescriptionListRow[]>([]);
   const [loading, setLoading]             = useState(true);
   const [selected, setSelected]           = useState<PrescriptionRow | null>(null);
 
@@ -415,7 +448,36 @@ export default function PrescriptionsClient() {
 
   useEffect(() => {
     const supabase = createClient();
+    // GDPR Art.5(1)(c) — list fetches metadata only. Clinical content
+    // (medication, dosage, pharmacy, etc.) is fetched per-row on open.
     supabase
+      .from("prescriptions")
+      .select(`
+        id, consultation_id, issued_at, created_at, healthmail_reference,
+        consultation:consultations (
+          id,
+          service_type,
+          partner_doctor_id,
+          patient:patients ( first_name, last_name ),
+          doctor:partner_doctors ( first_name, last_name )
+        )
+      `)
+      .order("created_at", { ascending: false })
+      .then(({ data, error }) => {
+        if (error) console.error("[prescriptions]", error.message);
+        setPrescriptions((data ?? []) as unknown as PrescriptionListRow[]);
+        setLoading(false);
+      });
+  }, []);
+
+  // Opening the detail slide-over fetches the full prescription on demand.
+  // TODO(audit): opening a prescription is a material clinical-data view
+  // event — insert an `audit_logs` row here with
+  // action = "prescription_viewed", table_name = "prescriptions",
+  // record_id = row.id. See app/dashboard/consultations/[id]/page.tsx.
+  async function openDetail(row: PrescriptionListRow) {
+    const supabase = createClient();
+    const { data, error } = await supabase
       .from("prescriptions")
       .select(`
         *,
@@ -427,21 +489,25 @@ export default function PrescriptionsClient() {
           doctor:partner_doctors ( first_name, last_name, imc_number )
         )
       `)
-      .order("created_at", { ascending: false })
-      .then(({ data, error }) => {
-        if (error) console.error("[prescriptions]", error.message);
-        setPrescriptions((data ?? []) as PrescriptionRow[]);
-        setLoading(false);
-      });
-  }, []);
+      .eq("id", row.id)
+      .single();
+    if (error || !data) {
+      console.error("[prescriptions] open detail", error?.message);
+      return;
+    }
+    setSelected(data as unknown as PrescriptionRow);
+  }
 
   const filtered = useMemo(() => {
     return prescriptions.filter(rx => {
       const name = patientName(rx.consultation?.patient ?? null).toLowerCase();
-      const med  = rx.medication.toLowerCase();
       const q    = search.toLowerCase();
 
-      if (q && !name.includes(q) && !med.includes(q) && !rxRef(rx.id).toLowerCase().includes(q)) return false;
+      // Note: medication search removed — `medication` is no longer fetched
+      // into the list view (GDPR minimisation). Drug-name search still works
+      // on the patient detail and consultation detail pages, which fetch
+      // clinical content intentionally.
+      if (q && !name.includes(q) && !rxRef(rx.id).toLowerCase().includes(q)) return false;
 
       if (statusFilter !== "all" && deriveStatus(rx) !== statusFilter) return false;
 
@@ -507,7 +573,7 @@ export default function PrescriptionsClient() {
           </svg>
           <input
             type="text"
-            placeholder="Search patient, medication, Rx ref…"
+            placeholder="Search patient or Rx ref…"
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="w-full rounded-xl bg-white/[0.05] py-2.5 pl-10 pr-3 text-sm text-white placeholder:text-white/30 outline-none ring-1 ring-white/10 focus:ring-white/20 transition-all"
@@ -578,7 +644,7 @@ export default function PrescriptionsClient() {
                 {filtered.length !== prescriptions.length && ` (filtered from ${prescriptions.length})`}
               </p>
             </div>
-            <PrescriptionList prescriptions={filtered} onSelect={setSelected} />
+            <PrescriptionList prescriptions={filtered} onSelect={(row) => { void openDetail(row); }} />
           </>
         )}
       </div>
