@@ -23,6 +23,7 @@ export async function GET() {
       .from("partner_doctors")
       .select("id")
       .eq("id", user.id)
+      .eq("is_active", true)
       .maybeSingle(),
   ]);
 

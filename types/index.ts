@@ -82,6 +82,8 @@ export type PartnerDoctor = {
   default_pharmacy_address: string | null;
   // Profile photo — add_profile_photo.sql
   profile_photo_url: string | null;
+  // Display — gp_self_update_partner_doctors.sql (optional until migration applied)
+  display_timezone?: string | null;
   created_at: ISOTimestamp;
 };
 

@@ -47,7 +47,7 @@ export default async function AdminLayout({
         {/* ── Admin Sidebar ── */}
         <aside className="hidden w-72 shrink-0 border-r border-white/10 px-5 py-6 md:block">
           <Link href="/admin">
-            <div className="relative h-12 w-full overflow-hidden rounded-2xl bg-white/[0.06] ring-1 ring-amber-500/20">
+            <div className="relative h-12 w-full overflow-hidden rounded-2xl bg-white/[0.06] ring-1 ring-white/10">
               <Image
                 src="/logo.png"
                 alt="ExpressGP"
@@ -60,31 +60,23 @@ export default async function AdminLayout({
             </div>
           </Link>
 
-          {/* Admin badge */}
-          <div className="mt-3 flex items-center justify-center">
-            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-0.5 text-[11px] font-semibold uppercase tracking-widest text-amber-400">
-              Admin Portal
-            </span>
-          </div>
-
-          {/* Admin identity card */}
-          <div className="mt-4 rounded-2xl bg-amber-500/5 p-3.5 ring-1 ring-amber-500/20">
+          {/* Identity card — matches GP dashboard style */}
+          <div className="mt-5 rounded-2xl bg-white/[0.06] p-3.5 ring-1 ring-white/10">
             <div className="flex items-center gap-3">
               <div
-                className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-amber-500/15 text-xs font-semibold tracking-tight text-amber-300 ring-1 ring-amber-500/35"
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#22c55e]/15 text-xs font-semibold tracking-tight text-[#86efac] ring-1 ring-[#22c55e]/35"
                 aria-hidden
               >
                 {initials}
               </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-white">{adminName}</p>
-                <p className="mt-0.5 truncate text-xs text-white/50">{adminEmail}</p>
-                <p className="mt-1 flex items-center gap-1.5 text-xs text-amber-400/80">
+                <p className="mt-1 flex items-center gap-1.5 text-xs text-white/55">
                   <span
-                    className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400 shadow-[0_0_0_2px_rgba(251,191,36,0.25)]"
+                    className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#22c55e] shadow-[0_0_0_2px_rgba(34,197,94,0.25)]"
                     aria-hidden
                   />
-                  Super admin
+                  Admin · Signed in
                 </p>
               </div>
             </div>

@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { label: "Documents",     href: "/dashboard/documents" },
   { label: "Patients",      href: "/dashboard/patients" },
   { label: "Settings",      href: "/dashboard/settings" },
+  { label: "Audit log",     href: "/dashboard/audit-log" },
 ];
 
 export default function SidebarNav({ unreadMessages }: { unreadMessages: number }) {

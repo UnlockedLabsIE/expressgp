@@ -23,11 +23,12 @@ export async function POST(req: NextRequest) {
 
   const admin = createAdminSupabaseClient();
 
-  // Call the stored procedure (defined in add_patient_anonymisation_procedure.sql)
+  // Call the stored procedure (defined in add_gdpr_fixes.sql).
+  // Parameters use p_ prefix to match the PostgreSQL function signature.
   const { data, error } = await admin.rpc("anonymise_patient", {
-    patient_id: patientId,
-    reason: reason.trim(),
-    requesting_admin_id: user.id,
+    p_patient_id:          patientId,
+    p_reason:              reason.trim(),
+    p_requesting_admin_id: user.id,
   });
 
   if (error) {

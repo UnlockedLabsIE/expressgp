@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase";
+import { logGpAudit } from "@/lib/audit";
 import type { DoctorNotificationPreferences, PartnerDoctor } from "@/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -187,6 +189,7 @@ function ConfigNotifRow({ label, description, checked, onChange }: { label: stri
 
 export default function SettingsClient({ doctor, notifPrefs, userEmail, lastSignInAt }: Props) {
   const supabase = createClient();
+  const router = useRouter();
   const toastRef = useRef(0);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [activeTab, setActiveTab] = useState<TabId>("profile");
@@ -216,7 +219,17 @@ export default function SettingsClient({ doctor, notifPrefs, userEmail, lastSign
       .eq("id", doctor.id);
     setSavingProfile(false);
     if (error) toast("Failed to save profile.", "error");
-    else toast("Profile updated successfully.");
+    else {
+      await logGpAudit(supabase, {
+        doctorId: doctor.id,
+        action: "gp_profile_updated",
+        tableName: "partner_doctors",
+        recordId: doctor.id,
+        newValue: { first_name: firstName.trim(), last_name: lastName.trim() },
+      });
+      toast("Profile updated successfully.");
+      router.refresh();
+    }
   }
 
   async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -259,7 +272,15 @@ export default function SettingsClient({ doctor, notifPrefs, userEmail, lastSign
       toast("Photo uploaded but failed to save URL.", "error");
     } else {
       setPhotoUrl(publicUrl);
+      await logGpAudit(supabase, {
+        doctorId: doctor.id,
+        action: "gp_profile_photo_updated",
+        tableName: "partner_doctors",
+        recordId: doctor.id,
+        newValue: { profile_photo_url: publicUrl },
+      });
       toast("Profile photo updated.");
+      router.refresh();
     }
   }
 
@@ -337,7 +358,17 @@ export default function SettingsClient({ doctor, notifPrefs, userEmail, lastSign
       .eq("id", doctor.id);
     setSavingAvail(false);
     if (error) toast("Failed to update availability. Run pending SQL migrations first.", "error");
-    else toast("Availability updated.");
+    else {
+      await logGpAudit(supabase, {
+        doctorId: doctor.id,
+        action: "gp_availability_updated",
+        tableName: "partner_doctors",
+        recordId: doctor.id,
+        newValue: { is_accepting_cases: accepting, out_of_office_until: oooDate || null },
+      });
+      toast("Availability updated.");
+      router.refresh();
+    }
   }
 
   async function handleAcceptingToggle(value: boolean) {
@@ -363,14 +394,78 @@ export default function SettingsClient({ doctor, notifPrefs, userEmail, lastSign
       .eq("id", doctor.id);
     setSavingPharmacy(false);
     if (error) toast("Failed to save pharmacy defaults.", "error");
-    else toast("Prescription defaults saved.");
+    else {
+      await logGpAudit(supabase, {
+        doctorId: doctor.id,
+        action: "gp_prescription_defaults_updated",
+        tableName: "partner_doctors",
+        recordId: doctor.id,
+        newValue: {
+          default_pharmacy_name: pharmacyName.trim() || null,
+          default_pharmacy_address: pharmacyAddress.trim() || null,
+        },
+      });
+      toast("Prescription defaults saved.");
+      router.refresh();
+    }
   }
 
   // ── Platform ───────────────────────────────────────────────────────────────
-  const [timezone, setTimezone] = useState("Europe/Dublin");
+  const [timezone, setTimezone] = useState(doctor?.display_timezone ?? "Europe/Dublin");
+  const [savingPlatform, setSavingPlatform] = useState(false);
+
+  async function savePlatformPrefs() {
+    if (!doctor) return;
+    setSavingPlatform(true);
+    const { error } = await supabase
+      .from("partner_doctors")
+      .update({ display_timezone: timezone })
+      .eq("id", doctor.id);
+    setSavingPlatform(false);
+    if (error) toast("Failed to save platform preferences.", "error");
+    else {
+      await logGpAudit(supabase, {
+        doctorId: doctor.id,
+        action: "gp_platform_preferences_updated",
+        tableName: "partner_doctors",
+        recordId: doctor.id,
+        newValue: { display_timezone: timezone },
+      });
+      toast("Platform preferences saved.");
+      router.refresh();
+    }
+  }
 
   const initials = firstName && lastName ? `${firstName[0]}${lastName[0]}`.toUpperCase() : "GP";
   const displayName = firstName || lastName ? `Dr. ${firstName} ${lastName}`.trim() : "Partner GP";
+
+  if (!doctor) {
+    return (
+      <div className="min-h-screen px-5 py-10">
+        <h1 className="text-xl font-semibold text-white">Settings</h1>
+        <div className="mt-6 max-w-lg rounded-2xl border border-amber-500/25 bg-amber-500/[0.08] p-5">
+          <p className="text-sm font-semibold text-amber-200">Partner GP profile unavailable</p>
+          <p className="mt-2 text-sm leading-relaxed text-white/60">
+            Your account is not linked to an active partner doctor profile, or your access has been suspended.
+            Contact ExpressGP administration to restore access. Clinical settings cannot be changed until then.
+          </p>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Link
+              href="/dashboard"
+              className="rounded-xl bg-white/10 px-4 py-2.5 text-sm font-medium text-white ring-1 ring-white/15 hover:bg-white/15"
+            >
+              Back to dashboard
+            </Link>
+            {userEmail && (
+              <p className="self-center text-xs text-white/40">
+                Signed in as <span className="text-white/70">{userEmail}</span>
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -461,9 +556,24 @@ export default function SettingsClient({ doctor, notifPrefs, userEmail, lastSign
                       <button
                         onClick={async () => {
                           if (!doctor) return;
-                          await supabase.from("partner_doctors").update({ profile_photo_url: null }).eq("id", doctor.id);
+                          const { error } = await supabase
+                            .from("partner_doctors")
+                            .update({ profile_photo_url: null })
+                            .eq("id", doctor.id);
+                          if (error) {
+                            toast("Failed to remove photo.", "error");
+                            return;
+                          }
                           setPhotoUrl("");
+                          await logGpAudit(supabase, {
+                            doctorId: doctor.id,
+                            action: "gp_profile_photo_removed",
+                            tableName: "partner_doctors",
+                            recordId: doctor.id,
+                            newValue: { profile_photo_url: null },
+                          });
                           toast("Photo removed.");
+                          router.refresh();
                         }}
                         className="rounded-lg px-3 py-1.5 text-xs font-medium text-white/35 transition-colors hover:text-red-300"
                       >
@@ -760,7 +870,7 @@ export default function SettingsClient({ doctor, notifPrefs, userEmail, lastSign
                   <p className="mt-0.5 text-xs text-white/40">View all activity recorded against your account.</p>
                 </div>
                 <Link
-                  href={`/dashboard/audit-log?actor=${doctor?.id ?? ""}`}
+                  href="/dashboard/audit-log"
                   className="rounded-xl bg-white/5 px-3 py-2 text-sm font-medium text-white/55 ring-1 ring-white/15 transition-colors hover:bg-white/10 hover:text-white"
                 >
                   View →
@@ -830,7 +940,7 @@ export default function SettingsClient({ doctor, notifPrefs, userEmail, lastSign
               </div>
             </div>
 
-            <SaveButton onClick={() => toast("Platform preferences saved.")} label="Save preferences" />
+            <SaveButton onClick={() => void savePlatformPrefs()} loading={savingPlatform} label="Save preferences" />
           </div>
         )}
 

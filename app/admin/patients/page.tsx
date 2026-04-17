@@ -22,9 +22,7 @@ export default async function AdminPatientsPage({
       .limit(100);
 
     if (q) {
-      query = query.or(
-        `first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`
-      );
+      query = query.or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`);
     }
 
     const { data } = await query;
@@ -34,116 +32,116 @@ export default async function AdminPatientsPage({
   }
 
   return (
-    <main className="px-6 py-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white">Patients</h1>
-        <p className="mt-1 text-sm text-white/45">
-          {patients.length} patient{patients.length !== 1 ? "s" : ""} shown
-          {q ? ` for "${q}"` : " · 100 most recent"}
-        </p>
-      </div>
-
-      {/* Search */}
-      <form method="GET" className="mb-6">
-        <div className="relative max-w-md">
-          <svg
-            className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-          </svg>
-          <input
-            type="search"
-            name="q"
-            defaultValue={q ?? ""}
-            placeholder="Search by name or email…"
-            className="w-full rounded-xl border border-white/10 bg-white/5 py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-white/25 outline-none focus:border-amber-500/40 focus:ring-2 focus:ring-amber-500/15"
-          />
+    <>
+      <header className="sticky top-0 z-10 border-b border-white/10 bg-[#0f1729]/85 px-5 pb-4 pt-6 backdrop-blur">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <p className="text-xl font-light tracking-[0.04em] text-white">Admin Portal</p>
         </div>
-      </form>
+      </header>
 
-      <div className="rounded-2xl border border-white/10 bg-white/[0.02] overflow-hidden">
-        {patients.length === 0 ? (
-          <div className="py-16 text-center">
-            <p className="text-sm text-white/35">
-              {q ? `No patients matching "${q}"` : "No patients registered yet."}
-            </p>
+      <main className="px-5 py-6">
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold tracking-tight text-white">Patients</h1>
+          <p className="mt-1 text-sm text-white/65">
+            {patients.length} patient{patients.length !== 1 ? "s" : ""} shown
+            {q ? ` for "${q}"` : " · 100 most recent"}
+          </p>
+        </div>
+
+        {/* Search */}
+        <form method="GET" className="mb-5">
+          <div className="relative max-w-md">
+            <svg
+              className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30"
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+            </svg>
+            <input
+              type="search"
+              name="q"
+              defaultValue={q ?? ""}
+              placeholder="Search by name or email…"
+              className="w-full rounded-xl border border-white/10 bg-white/5 py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-white/25 outline-none focus:border-white/20 focus:ring-2 focus:ring-white/10"
+            />
           </div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-white/10 text-left text-xs font-medium uppercase tracking-wider text-white/40">
-                <th className="px-5 py-3">Patient</th>
-                <th className="px-5 py-3">DOB</th>
-                <th className="px-5 py-3">Registered</th>
-                <th className="px-5 py-3">Status</th>
-                <th className="px-5 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {patients.map((p) => {
-                const isAnonymised = Boolean(p.anonymised_at);
-                const dob = p.dob
-                  ? new Date(String(p.dob)).toLocaleDateString("en-IE", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                    })
-                  : "—";
-                const registered = p.created_at
-                  ? new Date(String(p.created_at)).toLocaleDateString("en-IE", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                    })
-                  : "—";
+        </form>
 
-                return (
-                  <tr key={String(p.id)} className="group transition-colors hover:bg-white/[0.03]">
-                    <td className="px-5 py-4">
-                      <p className={["font-medium", isAnonymised ? "text-white/35 line-through" : "text-white"].join(" ")}>
-                        {isAnonymised ? "[Anonymised]" : `${String(p.first_name ?? "")} ${String(p.last_name ?? "")}`}
-                      </p>
-                      {!isAnonymised && (
-                        <p className="text-xs text-white/40">{String(p.email ?? "")}</p>
-                      )}
-                    </td>
-                    <td className="px-5 py-4 text-xs text-white/55">{dob}</td>
-                    <td className="px-5 py-4 text-xs text-white/45">{registered}</td>
-                    <td className="px-5 py-4">
-                      {isAnonymised ? (
-                        <span className="rounded-full bg-slate-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-slate-400 ring-1 ring-slate-500/20">
-                          Anonymised
-                        </span>
-                      ) : (
-                        <span className="rounded-full bg-green-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-green-400 ring-1 ring-green-500/20">
-                          Active
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-5 py-4 text-right">
-                      <Link
-                        href={`/admin/patients/${p.id}`}
-                        className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-white"
-                      >
-                        View
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
+        <div className="rounded-2xl bg-white/5 ring-1 ring-white/10 overflow-hidden">
+          {patients.length === 0 ? (
+            <div className="py-16 text-center">
+              <p className="text-sm text-white/40">
+                {q ? `No patients matching "${q}"` : "No patients registered yet."}
+              </p>
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-left text-xs font-semibold uppercase tracking-wider text-white/40">
+                  <th className="px-5 py-3">Patient</th>
+                  <th className="px-5 py-3">DOB</th>
+                  <th className="px-5 py-3">Registered</th>
+                  <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {patients.map((p) => {
+                  const isAnonymised = Boolean(p.anonymised_at);
+                  const dob = p.dob
+                    ? new Date(String(p.dob)).toLocaleDateString("en-IE", { day: "2-digit", month: "short", year: "numeric" })
+                    : "—";
+                  const registered = p.created_at
+                    ? new Date(String(p.created_at)).toLocaleDateString("en-IE", { day: "2-digit", month: "short", year: "numeric" })
+                    : "—";
 
-      {/* GDPR notice */}
-      <p className="mt-4 text-xs text-white/25">
-        Patient data shown here is protected under GDPR. Anonymisation is irreversible and should only be actioned on receipt of a verified Right to Erasure request.
-      </p>
-    </main>
+                  return (
+                    <tr key={String(p.id)} className="group transition-colors hover:bg-white/[0.03]">
+                      <td className="px-5 py-4">
+                        <p className={["font-medium", isAnonymised ? "text-white/30 line-through" : "text-white"].join(" ")}>
+                          {isAnonymised ? "[Anonymised]" : `${String(p.first_name ?? "")} ${String(p.last_name ?? "")}`}
+                        </p>
+                        {!isAnonymised && (
+                          <p className="text-xs text-white/45">{String(p.email ?? "")}</p>
+                        )}
+                      </td>
+                      <td className="px-5 py-4 text-xs text-white/55">{dob}</td>
+                      <td className="px-5 py-4 text-xs text-white/45">{registered}</td>
+                      <td className="px-5 py-4">
+                        {isAnonymised ? (
+                          <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold text-white/45 ring-1 ring-white/10">
+                            Anonymised
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-[#22c55e]/10 px-2.5 py-0.5 text-[11px] font-semibold text-[#86efac] ring-1 ring-[#22c55e]/25">
+                            Active
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-5 py-4 text-right">
+                        <Link
+                          href={`/admin/patients/${p.id}`}
+                          className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+                        >
+                          View
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <p className="mt-4 text-xs text-white/25">
+          Patient data is protected under GDPR. Anonymisation is irreversible and should only be actioned on receipt of a verified Right to Erasure request.
+        </p>
+
+        <footer className="mt-6 border-t border-white/10 pt-6 text-xs text-white/35">
+          ExpressGP admin tools — handle patient data and GP management with care.
+        </footer>
+      </main>
+    </>
   );
 }

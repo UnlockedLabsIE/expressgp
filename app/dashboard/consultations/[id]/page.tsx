@@ -133,9 +133,10 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
   const [cert, setCert] = useState({ type: "sick_note", reason: "", from: todayStr(), to: plusDays(7), notes: "" });
   const [ref, setRef] = useState({ specialty: "", urgency: "routine", info: "" });
 
-  // GP identity (for PDFs)
-  const [gpName, setGpName] = useState("Dr. John O'Donovan");
+  // GP identity (for PDFs) and active status
+  const [gpName, setGpName] = useState("Dr. —");
   const [gpImc,  setGpImc]  = useState("IMC-XXXXXX");
+  const [gpActive, setGpActive] = useState(true);
   // Re-download callback stored after issue
   const [redownload, setRedownload] = useState<(() => Promise<void>) | null>(null);
 
@@ -194,16 +195,32 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
 
       // Do NOT auto-claim — GP must explicitly claim the case
 
-      // Fetch GP details for PDFs
+      // Fetch GP details for PDFs and active-status gate
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const { data: gp } = await supabase
           .from("partner_doctors")
-          .select("name, imc_number")
+          .select("first_name, last_name, imc_number, is_active, default_pharmacy_name, default_pharmacy_address")
           .eq("id", user.id)
           .single();
-        if (gp?.name)       setGpName(gp.name);
+        if (gp?.first_name) setGpName(`Dr. ${gp.first_name}${gp.last_name ? ` ${gp.last_name}` : ""}`.trim());
         if (gp?.imc_number) setGpImc(gp.imc_number);
+        if (gp?.is_active === false) setGpActive(false);
+
+        const pharmacyDefault = [gp?.default_pharmacy_name, gp?.default_pharmacy_address].filter(Boolean).join(", ");
+        if (pharmacyDefault) {
+          setRx((r) => (r.pharmacy ? r : { ...r, pharmacy: pharmacyDefault }));
+        }
+
+        // ISO 27001 — every clinical data VIEW must be audit-logged
+        void supabase.from("audit_logs").insert({
+          actor_id:   user.id,
+          actor_type: "partner_doctor",
+          action:     "clinical_data_viewed",
+          table_name: "consultations",
+          record_id:  id,
+          new_value:  { consultation_id: id, patient_id: data.patient_id ?? null },
+        });
       }
 
       setLoading(false);
@@ -296,17 +313,19 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
     }
   }
 
-  // ── Decline ───────────────────────────────────────────────────────────────
+  // ── Decline — calls API route which handles Stripe refund (Consumer Rights Act 2022)
 
   async function handleDecline() {
     if (!declineReason.trim()) return;
-    const { data: { user } } = await supabase.auth.getUser();
-    await supabase.from("consultations").update({
-      status: "declined",
-      decline_reason: declineReason,
-      doctor_notes: gpNotes,
-      partner_doctor_id: user?.id,
-    }).eq("id", id);
+    const res = await fetch(`/api/consultations/${id}/decline`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ declineReason, gpNotes }),
+    });
+    if (!res.ok) {
+      console.error("[handleDecline] API error", await res.text());
+      return;
+    }
     await sendMsg(`Your consultation has been declined. Reason: ${declineReason}`);
     setStatus("declined");
     setStep("done");
@@ -416,6 +435,18 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
     );
   }
 
+  if (!gpActive) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#0f1729]">
+        <div className="max-w-md rounded-2xl bg-red-500/10 p-8 text-center ring-1 ring-red-500/30">
+          <p className="text-base font-bold text-red-300">Account suspended</p>
+          <p className="mt-2 text-sm text-white/50">Your GP account is currently inactive. You cannot view or action consultations until your account is reactivated by an administrator.</p>
+          <p className="mt-4 text-xs text-white/30">Contact support@expressgp.com if you believe this is an error.</p>
+        </div>
+      </div>
+    );
+  }
+
   const svcConfig = SERVICE_ACTION[consult.service_type] ?? { label: "Approve", docType: "none" as DocIssueType, healthmail: false };
   const isRedFlag = consult.triage_session?.red_flag_triggered ?? false;
   const patientName = `${consult.patient.first_name} ${consult.patient.last_name}`;
@@ -477,6 +508,21 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
       </header>
 
       {/* ── Body ── */}
+      {/* 999/112 emergency banner — IMC Rule 5 / Medical Council guidance */}
+      {isRedFlag && (
+        <div className="border-b border-red-500/40 bg-red-950/60 px-5 py-3">
+          <div className="mx-auto flex max-w-7xl items-center gap-3">
+            <svg className="h-5 w-5 shrink-0 text-red-400" viewBox="0 0 24 24" fill="none">
+              <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <div>
+              <p className="text-sm font-bold text-red-300">Emergency indicators detected — do not delay emergency care</p>
+              <p className="mt-0.5 text-xs text-red-200/70">If this patient may be in immediate danger, call <strong className="text-red-200">999 or 112</strong> now. Advise the patient to contact emergency services before completing this consultation.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mx-auto max-w-7xl gap-5 px-5 py-6 lg:grid lg:grid-cols-[1fr_390px]">
 
         {/* LEFT */}
@@ -521,6 +567,12 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
               )}
             </div>
             <div className="space-y-4 px-5 py-4">
+              {/* EU AI Act Art.14 — human oversight notice */}
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3.5 py-2.5">
+                <p className="text-[10px] leading-relaxed text-amber-200/70">
+                  <strong className="text-amber-200/90">AI advisory only.</strong> This triage summary is generated by an automated system and must not replace your clinical judgement. Per EU AI Act Article 14, a qualified GP must review and validate all AI-assisted recommendations before any clinical decision is made.
+                </p>
+              </div>
               {aiSummary ? (
                 <div className={`flex items-start gap-3 rounded-xl px-4 py-3 ${isRedFlag ? "bg-red-500/10 ring-1 ring-red-500/20" : "bg-[#22c55e]/8 ring-1 ring-[#22c55e]/15"}`}>
                   <svg className={`mt-0.5 h-4 w-4 shrink-0 ${isRedFlag ? "text-red-400" : "text-[#22c55e]"}`} viewBox="0 0 24 24" fill="none">
@@ -612,6 +664,15 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
                       </svg>
                       Download PDF
                     </button>
+                  )}
+                  {/* Post-consultation local GP advisory — IMC / Medical Council guidance */}
+                  {status === "approved" && (
+                    <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Remind the patient</p>
+                      <p className="mt-1 text-xs leading-relaxed text-white/45">
+                        For ongoing primary care, advise the patient to register with a local GP. ExpressGP is a supplementary remote service and does not replace a long-term GP–patient relationship.
+                      </p>
+                    </div>
                   )}
                 </div>
               )}

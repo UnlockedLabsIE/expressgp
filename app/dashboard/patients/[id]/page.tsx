@@ -61,7 +61,7 @@ function retentionDeadline(lastConsult: string | null, dob: string | null): stri
   const dates: Date[] = [];
   if (lastConsult) {
     const d = new Date(lastConsult);
-    d.setFullYear(d.getFullYear() + 7);
+    d.setFullYear(d.getFullYear() + 8);
     dates.push(d);
   }
   if (dob) {
@@ -178,7 +178,7 @@ function GDPRPanel({
           <p className="text-xs font-semibold text-amber-300">Mandatory retention period</p>
           <p className="mt-1 text-xs leading-relaxed text-amber-200/65">
             Irish Medical Council guidelines require this record to be retained until at least{" "}
-            <strong className="text-amber-200">{deadline}</strong> (7 years from last treatment,
+            <strong className="text-amber-200">{deadline}</strong> (8 years from last treatment,
             or age 25, whichever is later). Records <strong className="text-amber-200">cannot
             be permanently deleted</strong> during this period, even on patient request.
           </p>

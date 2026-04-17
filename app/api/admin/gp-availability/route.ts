@@ -39,7 +39,7 @@ export async function PATCH(req: NextRequest) {
     action: "availability_override",
     table_name: "partner_doctors",
     record_id: gpId,
-    metadata: { is_accepting_cases: isAccepting },
+    new_value: { is_accepting_cases: isAccepting },
   });
 
   return NextResponse.json({ ok: true });
