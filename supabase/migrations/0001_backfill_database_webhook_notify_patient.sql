@@ -1,0 +1,56 @@
+-- ─────────────────────────────────────────────────────────────────────────────
+-- BACKFILL — Database Webhook: notify-patient-on-status-change
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Purpose
+--   Recreates the AFTER UPDATE trigger on public.consultations that fires the
+--   `notify-patient` Edge Function via supabase_functions.http_request.
+--
+--   Configured in the Supabase dashboard under Database → Webhooks on live
+--   prod (ref: xxnffdscpeksuvcdmffz) but never committed to git.
+--
+-- Why it lives in its own migration
+--   The Edge Function URL is project-specific. Dev, staging, and prod each
+--   have different supabase.co project URLs, so this trigger must be recreated
+--   per environment with the correct URL.
+--
+-- APPLYING THIS PER-ENVIRONMENT
+--   Option A (recommended): use the Supabase dashboard's Database Webhooks UI
+--                           per environment — it manages auth headers cleanly.
+--   Option B: run the statement below with the correct URL for the target
+--             environment after substituting <PROJECT_REF>. Leave commented
+--             in git so it doesn't run accidentally against the wrong env.
+--
+-- ORIGINAL PROD DEFINITION (for reference):
+--   CREATE TRIGGER "notify-patient-on-status-change"
+--     AFTER UPDATE ON public.consultations
+--     FOR EACH ROW
+--     EXECUTE FUNCTION supabase_functions.http_request(
+--       'https://xxnffdscpeksuvcdmffz.supabase.co/functions/v1/notify-patient',
+--       'POST',
+--       '{"Content-type":"application/json"}',
+--       '{}',
+--       '5000'
+--     );
+--
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- Uncomment, substitute <PROJECT_REF>, and run per environment. Or use the
+-- dashboard webhook UI.
+--
+-- DO $$
+-- BEGIN
+--   IF NOT EXISTS (
+--     SELECT 1 FROM pg_trigger
+--     WHERE tgname = 'notify-patient-on-status-change'
+--       AND tgrelid = 'public.consultations'::regclass
+--   ) THEN
+--     EXECUTE format($f$
+--       CREATE TRIGGER "notify-patient-on-status-change"
+--         AFTER UPDATE ON public.consultations
+--         FOR EACH ROW
+--         EXECUTE FUNCTION supabase_functions.http_request(
+--           %L, 'POST', '{"Content-type":"application/json"}', '{}', '5000'
+--         )
+--     $f$, 'https://<PROJECT_REF>.supabase.co/functions/v1/notify-patient');
+--   END IF;
+-- END $$;

@@ -1,12 +1,5 @@
--- Shared in-platform clinical record (ExpressGP partner GPs)
--- Any partner GP who has (or had) a consultation assigned to them for patient P
--- may SELECT consultations, prescriptions, documents, and messages for ALL
--- consultations belonging to P on this platform (not only rows where they
--- are partner_doctor_id). Patients still see only their own rows.
--- Pending queue: any active partner_doctor may still SELECT pending consultations.
---
--- The "treated this patient" check MUST NOT subquery `consultations` inside the
--- consultations policy (infinite RLS recursion). Use SECURITY DEFINER helper.
+-- Fix infinite recursion on consultations RLS: policies must not subquery the same
+-- table they protect. Use a SECURITY DEFINER helper (table owner bypasses RLS on inner read).
 
 create or replace function public.gp_auth_user_treated_patient(p_patient_id uuid)
 returns boolean
@@ -27,9 +20,9 @@ revoke all on function public.gp_auth_user_treated_patient(uuid) from public;
 grant execute on function public.gp_auth_user_treated_patient(uuid) to authenticated;
 
 comment on function public.gp_auth_user_treated_patient(uuid) is
-  'True if auth.uid() has been partner_doctor on any consultation for p_patient_id. RLS helper to avoid recursion.';
+  'True if the current auth user has ever been assigned partner_doctor on any consultation for this patient_id. Used by RLS to avoid recursive policy on consultations.';
 
--- ─── consultations SELECT ───────────────────────────────────────────────────
+-- ─── consultations SELECT (fixed) ───────────────────────────────────────────
 drop policy if exists "consultations_select_patient_or_doctor" on consultations;
 create policy "consultations_select_patient_or_doctor"
   on consultations
@@ -48,10 +41,8 @@ create policy "consultations_select_patient_or_doctor"
     )
   );
 
--- ─── prescriptions SELECT ───────────────────────────────────────────────────
-drop policy if exists "prescriptions_select_patient_or_doctor" on prescriptions;
-drop policy if exists "GP can view prescriptions from own consultations" on prescriptions;
-
+-- ─── prescriptions SELECT (fixed) ─────────────────────────────────────────
+drop policy if exists "prescriptions_select_shared_clinical" on prescriptions;
 create policy "prescriptions_select_shared_clinical"
   on prescriptions
   for select
@@ -76,12 +67,8 @@ create policy "prescriptions_select_shared_clinical"
     )
   );
 
--- INSERT unchanged: only assigned GP may insert (policy from add_clinical_record / schema)
-
--- ─── documents SELECT ─────────────────────────────────────────────────────────
-drop policy if exists "documents_select_patient_or_doctor" on documents;
-drop policy if exists "GP can view documents from own consultations" on documents;
-
+-- ─── documents SELECT (fixed) ───────────────────────────────────────────────
+drop policy if exists "documents_select_shared_clinical" on documents;
 create policy "documents_select_shared_clinical"
   on documents
   for select
@@ -106,10 +93,8 @@ create policy "documents_select_shared_clinical"
     )
   );
 
--- ─── messages SELECT ──────────────────────────────────────────────────────────
-drop policy if exists "messages_select_patient_or_doctor" on messages;
-drop policy if exists "GP can view messages in own consultations" on messages;
-
+-- ─── messages SELECT (fixed) ────────────────────────────────────────────────
+drop policy if exists "messages_select_shared_clinical" on messages;
 create policy "messages_select_shared_clinical"
   on messages
   for select
@@ -134,13 +119,13 @@ create policy "messages_select_shared_clinical"
     )
   );
 
--- ─── triage_sessions SELECT (linked from consultations) ───────────────────────
+-- ─── triage_sessions SELECT (fixed) ───────────────────────────────────────────
 do $$ begin
   if exists (
     select 1 from information_schema.tables
     where table_schema = 'public' and table_name = 'triage_sessions'
   ) then
-    drop policy if exists "GP can view triage sessions linked to own consultations" on triage_sessions;
+    drop policy if exists "triage_sessions_select_shared_clinical" on triage_sessions;
 
     create policy "triage_sessions_select_shared_clinical"
       on triage_sessions
@@ -166,6 +151,3 @@ do $$ begin
       );
   end if;
 end $$;
-
-comment on policy "prescriptions_select_shared_clinical" on prescriptions is
-  'ExpressGP shared in-platform record: partner GPs see prescriptions for any consultation of a patient they have treated.';
