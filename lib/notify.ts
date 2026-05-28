@@ -13,8 +13,18 @@
 import { Resend } from "resend";
 import { sendWhatsApp } from "@/lib/whatsapp";
 
-const resend = new Resend(process.env.RESEND_API_KEY ?? "");
-const FROM   = process.env.RESEND_FROM ?? "ExpressGP <notifications@expressgp.ie>";
+const FROM = process.env.RESEND_FROM ?? "ExpressGP <notifications@expressgp.ie>";
+
+// Lazy-init: the Resend SDK throws if constructed with an empty key, which kills
+// Vercel's "Collecting page data" build phase when the key isn't set. Defer
+// construction until actual send time so missing keys fail per-request, not at build.
+let resendClient: Resend | null = null;
+function getResend(): Resend | null {
+  const key = process.env.RESEND_API_KEY;
+  if (!key || key === "YOUR_RESEND_API_KEY") return null;
+  if (!resendClient) resendClient = new Resend(key);
+  return resendClient;
+}
 
 interface NotifyOptions {
   /** Patient's mobile in E.164 format e.g. "+353871234567" */
@@ -63,14 +73,17 @@ export async function notifyPatientNewMessage(opts: NotifyOptions): Promise<void
       : Promise.resolve(),
 
     // Email via Resend (no-op if key not configured)
-    email && process.env.RESEND_API_KEY && process.env.RESEND_API_KEY !== "YOUR_RESEND_API_KEY"
-      ? resend.emails.send({
-          from: FROM,
-          to: email,
-          subject: emailSubject,
-          html: emailHtml,
-        })
-      : Promise.resolve(),
+    (() => {
+      if (!email) return Promise.resolve();
+      const resend = getResend();
+      if (!resend) return Promise.resolve();
+      return resend.emails.send({
+        from: FROM,
+        to: email,
+        subject: emailSubject,
+        html: emailHtml,
+      });
+    })(),
   ]);
 
   for (const result of results) {

@@ -7,8 +7,18 @@ import { recordGpNotificationDelivery } from "@/lib/gp-notification-delivery";
 import { createAdminSupabaseClient } from "@/lib/supabase-admin";
 import { sendWhatsApp } from "@/lib/whatsapp";
 
-const resend = new Resend(process.env.RESEND_API_KEY ?? "");
 const FROM = process.env.RESEND_FROM ?? "ExpressGP <notifications@expressgp.ie>";
+
+// Lazy-init: the Resend SDK throws if constructed with an empty key, which kills
+// the Vercel "Collecting page data" build phase when the key isn't set. Defer
+// construction until actual send time so missing keys fail per-request, not at build.
+let resendClient: Resend | null = null;
+function getResend(): Resend | null {
+  const key = process.env.RESEND_API_KEY;
+  if (!key || key === "YOUR_RESEND_API_KEY") return null;
+  if (!resendClient) resendClient = new Resend(key);
+  return resendClient;
+}
 
 async function tryEmailToGp(opts: {
   doctorId: string;
@@ -18,8 +28,8 @@ async function tryEmailToGp(opts: {
   notificationType: string;
   consultationId: string | null;
 }): Promise<void> {
-  const hasKey = Boolean(process.env.RESEND_API_KEY && process.env.RESEND_API_KEY !== "YOUR_RESEND_API_KEY");
-  if (!hasKey) {
+  const resend = getResend();
+  if (!resend) {
     await recordGpNotificationDelivery({
       doctorId: opts.doctorId,
       notificationType: opts.notificationType,
