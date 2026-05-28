@@ -10,7 +10,7 @@ Partner GPs update profile, availability, and prescription defaults in-app. Admi
 
 ## Decisions
 
-1. **IMC and employment / account status** — Only `service_role` (admin APIs) may change `imc_number`, `email`, `employment_type`, and `is_active`. Enforced in PostgreSQL by `partner_doctors_enforce_field_limits` (`gp_self_update_partner_doctors.sql`). GPs cannot self-edit these fields in Settings.
+1. **Legal name, IMC, employment / account status** — Only `service_role` (admin APIs) may change `first_name`, `last_name`, `imc_number`, `email`, `employment_type`, and `is_active`. Enforced in PostgreSQL by `partner_doctors_enforce_field_limits` (`gp_self_update_partner_doctors.sql` and `partner_doctors_lock_name_admin_only.sql` for existing DBs). GPs cannot self-edit these fields in Settings; profile photo remains optional self-service.
 
 2. **Audit log (v1)** — `/dashboard/audit-log` lists `audit_logs` where `actor_id = auth.uid()` and `actor_type = partner_doctor` (own actions only). Wider scope (e.g. all clinical access across the practice) requires DPO review and separate product decision.
 

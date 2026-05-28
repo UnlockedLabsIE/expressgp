@@ -19,7 +19,7 @@ Internal checklist for privacy lead / future DPO and clinical lead. Not legal ad
 
 ## Still manual in Supabase
 
-- Apply all pending SQL migrations in order (including `storage_doctor_photos_policies.sql` and `shared_clinical_record_rls.sql`).
+- Apply all pending SQL migrations in order (including `storage_doctor_photos_policies.sql` and `shared_clinical_record_rls.sql`). If the dashboard shows **infinite recursion detected in policy for relation "consultations"**, apply **`shared_clinical_record_rls_fix_recursion.sql`** (or re-run the updated `shared_clinical_record_rls.sql` which defines `gp_auth_user_treated_patient` and non-recursive policies).
 - In Storage, confirm bucket `doctor-photos` exists and policies apply after migration.
 
 ## Optional follow-ups
