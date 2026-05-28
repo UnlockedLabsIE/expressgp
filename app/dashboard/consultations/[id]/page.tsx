@@ -39,6 +39,20 @@ function plusDays(n: number) {
   return d.toISOString().split("T")[0];
 }
 
+/** Only paid consultations may be claimed, approved, or issued against. */
+function consultationIsPaid(paymentStatus: string | null | undefined): boolean {
+  return paymentStatus === "paid";
+}
+
+/** Block PDF issuance if IMC is missing or still the dashboard placeholder. */
+function isValidImcForIssuance(imc: string): boolean {
+  const t = imc.trim();
+  if (t.length < 5) return false;
+  if (/imc[-\s]?x{3,}/i.test(t)) return false;
+  if (/x{5,}/i.test(t.replace(/[\s-]/g, ""))) return false;
+  return true;
+}
+
 // ─── Service config ───────────────────────────────────────────────────────────
 
 type DocIssueType = "prescription" | "sick_note" | "medical_cert" | "referral" | "insurance_report" | "none";
@@ -160,6 +174,11 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
   const [clinicalRx, setClinicalRx] = useState<ClinicalRxRow[]>([]);
   const [clinicalDocs, setClinicalDocs] = useState<ClinicalDocRow[]>([]);
   const [siblingCases, setSiblingCases] = useState<SiblingConsultation[]>([]);
+  /** null = not loaded yet; whether patient_consents has a row for this patient (GP governance). */
+  const [consentOnFile, setConsentOnFile] = useState<boolean | null>(null);
+  const [decisionError, setDecisionError] = useState<string | null>(null);
+  /** Authenticated GP user id — stored on load for use in audit helpers below. */
+  const [gpUserId, setGpUserId] = useState<string | null>(null);
 
   /** All prescriptions/documents for this patient across consultations (RLS: shared in-platform record). */
   const loadSharedPatientRecord = useCallback(async (patientId: string | undefined, caseId: string) => {
@@ -264,6 +283,7 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
       // Fetch GP details for PDFs and active-status gate
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
+        setGpUserId(user.id);
         const { data: gp } = await supabase
           .from("partner_doctors")
           .select("first_name, last_name, imc_number, is_active, default_pharmacy_name, default_pharmacy_address")
@@ -271,6 +291,7 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
           .single();
         if (gp?.first_name) setGpName(`Dr. ${gp.first_name}${gp.last_name ? ` ${gp.last_name}` : ""}`.trim());
         if (gp?.imc_number) setGpImc(gp.imc_number);
+        // is_active = admin account access to the platform (not the same as is_accepting_cases).
         if (gp?.is_active === false) setGpActive(false);
 
         const pharmacyDefault = [gp?.default_pharmacy_name, gp?.default_pharmacy_address].filter(Boolean).join(", ");
@@ -291,10 +312,27 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
 
       await loadSharedPatientRecord(data.patient_id ?? undefined, id);
 
+      if (data.patient_id) {
+        const { data: consentRow } = await supabase
+          .from("patient_consents")
+          .select("id")
+          .eq("patient_id", data.patient_id)
+          .order("consented_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        setConsentOnFile(Boolean(consentRow));
+      } else {
+        setConsentOnFile(false);
+      }
+
       setLoading(false);
     }
     load();
   }, [id, loadSharedPatientRecord]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    setDecisionError(null);
+  }, [step]);
 
   // ── Real-time messages ────────────────────────────────────────────────────
 
@@ -309,17 +347,43 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
     return () => { supabase.removeChannel(ch); };
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Clinical audit helper ─────────────────────────────────────────────────
+  // Fire-and-forget: audit rows must never block clinical actions.
+
+  function audit(params: {
+    action: string;
+    table_name: string;
+    record_id: string;
+    new_value?: Record<string, unknown>;
+  }) {
+    if (!gpUserId) return;
+    void supabase.from("audit_logs").insert({
+      actor_id:   gpUserId,
+      actor_type: "partner_doctor",
+      action:     params.action,
+      table_name: params.table_name,
+      record_id:  params.record_id,
+      new_value:  params.new_value ?? null,
+    });
+  }
+
   // ── Send message ──────────────────────────────────────────────────────────
 
   async function sendMsg(text?: string) {
     const body = (text ?? msgInput).trim();
     if (!body) return;
     setMsgInput("");
-    await supabase.from("messages").insert({
+    const { data: msgData } = await supabase.from("messages").insert({
       consultation_id: id,
       sender_type: "partner_doctor",
       body,
       is_read: false,
+    }).select("id").single();
+    audit({
+      action:     "send_message",
+      table_name: "messages",
+      record_id:  msgData?.id ?? id,
+      new_value:  { consultation_id: id },
     });
     // Notify patient via WhatsApp + email (fire-and-forget, non-blocking)
     notifyPatient();
@@ -358,19 +422,33 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
 
   async function saveNotes() {
     await supabase.from("consultations").update({ doctor_notes: gpNotes }).eq("id", id);
+    audit({ action: "save_clinical_notes", table_name: "consultations", record_id: id });
   }
 
   // ── Start Whereby video call ───────────────────────────────────────────────
 
   async function startVideoCall() {
+    if (!consult || !consultationIsPaid(consult.payment_status)) {
+      setDecisionError("Video calls are only available once payment is confirmed.");
+      return;
+    }
     setVideoLoading(true);
+    setDecisionError(null);
     try {
       const res = await fetch("/api/video", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ consultationId: id }),
       });
-      const data = await res.json() as { hostRoomUrl: string; roomUrl: string };
+      const data = await res.json() as { error?: string; hostRoomUrl?: string; roomUrl?: string };
+      if (!res.ok) {
+        setDecisionError(data.error ?? "Could not create the video room.");
+        return;
+      }
+      if (!data.hostRoomUrl || !data.roomUrl) {
+        setDecisionError("Invalid response from video service.");
+        return;
+      }
       setHostRoomUrl(data.hostRoomUrl);
       setPatientRoomUrl(data.roomUrl);
       const videoMsg = `Your GP is ready for your video consultation. Join here: ${data.roomUrl}`;
@@ -403,12 +481,17 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
 
   async function handleMoreInfo() {
     if (!moreInfoMsg.trim()) return;
+    if (!consult || !consultationIsPaid(consult.payment_status)) {
+      setDecisionError("Payment must be confirmed before requesting more information.");
+      return;
+    }
     const { data: { user } } = await supabase.auth.getUser();
     await supabase.from("consultations").update({
       status: "more_info_required",
       doctor_notes: gpNotes,
       partner_doctor_id: user?.id,
     }).eq("id", id);
+    audit({ action: "request_more_info", table_name: "consultations", record_id: id });
     await sendMsg(moreInfoMsg);
     setStatus("more_info_required");
     setStep("done");
@@ -417,6 +500,17 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
   // ── Issue document / approve ──────────────────────────────────────────────
 
   async function handleIssue() {
+    setDecisionError(null);
+    if (!consult || !consultationIsPaid(consult.payment_status)) {
+      setDecisionError("Payment must be confirmed before you can issue or approve.");
+      return;
+    }
+    if (!isValidImcForIssuance(gpImc)) {
+      setDecisionError(
+        "Your IMC number must be set correctly on your profile before issuing documents or approving. Contact an administrator if it is missing.",
+      );
+      return;
+    }
     setIssuing(true);
     try {
       const issuedAt = new Date().toISOString();
@@ -424,7 +518,7 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
       const patientName = `${patient.first_name} ${patient.last_name}`;
 
       if (docType === "prescription") {
-        await supabase.from("prescriptions").insert({
+        const { data: rxInserted } = await supabase.from("prescriptions").insert({
           consultation_id: id,
           medication: rx.drug,
           dosage: rx.dose,
@@ -432,23 +526,42 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
           duration: rx.duration,
           pharmacy_name: rx.pharmacy,
           issued_at: issuedAt,
+        }).select("id").single();
+        audit({
+          action:     "issue_prescription",
+          table_name: "prescriptions",
+          record_id:  rxInserted?.id ?? id,
+          new_value:  { consultation_id: id, medication: rx.drug, imc_number: gpImc },
         });
       } else if (docType === "referral") {
-        await supabase.from("documents").insert({
+        const { data: docInserted } = await supabase.from("documents").insert({
           consultation_id: id,
           type: "referral_letter",
           content: JSON.stringify({ specialty: ref.specialty, urgency: ref.urgency, clinical_info: ref.info }),
           issued_at: issuedAt,
+        }).select("id").single();
+        audit({
+          action:     "issue_document",
+          table_name: "documents",
+          record_id:  docInserted?.id ?? id,
+          new_value:  { consultation_id: id, document_type: "referral_letter", imc_number: gpImc },
         });
       } else if (["sick_note", "medical_cert", "insurance_report"].includes(docType)) {
         const typeMap: Record<string, string> = {
           sick_note: "sick_note", medical_cert: "medical_cert", insurance_report: "insurance_report",
         };
-        await supabase.from("documents").insert({
+        const mappedType = typeMap[docType] ?? "other";
+        const { data: docInserted } = await supabase.from("documents").insert({
           consultation_id: id,
-          type: typeMap[docType] ?? "other",
+          type: mappedType,
           content: JSON.stringify({ reason: cert.reason, from: cert.from, to: cert.to, notes: cert.notes }),
           issued_at: issuedAt,
+        }).select("id").single();
+        audit({
+          action:     "issue_document",
+          table_name: "documents",
+          record_id:  docInserted?.id ?? id,
+          new_value:  { consultation_id: id, document_type: mappedType, imc_number: gpImc },
         });
       }
 
@@ -456,24 +569,30 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
         status: "approved",
         doctor_notes: gpNotes,
       }).eq("id", id);
+      audit({ action: "approve_consultation", table_name: "consultations", record_id: id });
 
       await sendMsg("Your consultation has been reviewed and approved. Please check your dashboard for your document.");
 
       // Build PDF download function based on doc type
+      const capturedDocType = docType;
       const buildDownload = async () => {
         const common = { patientName, dob: patient.dob ?? "", address: patient.address ?? "", consultationId: id, gpName, imcNumber: gpImc, issuedAt };
-        if (docType === "prescription") {
+        if (capturedDocType === "prescription") {
           const { downloadPrescription } = await import("@/lib/pdf/generate");
           await downloadPrescription({ ...common, drug: rx.drug, dose: rx.dose, frequency: rx.frequency, duration: rx.duration, pharmacy: rx.pharmacy });
-        } else if (docType === "referral") {
+          audit({ action: "download_prescription_pdf", table_name: "prescriptions", record_id: id, new_value: { consultation_id: id } });
+        } else if (capturedDocType === "referral") {
           const { downloadReferral } = await import("@/lib/pdf/generate");
           await downloadReferral({ ...common, specialty: ref.specialty, urgency: ref.urgency as "routine"|"urgent"|"emergency", clinicalInfo: ref.info });
-        } else if (docType === "sick_note") {
+          audit({ action: "download_document_pdf", table_name: "documents", record_id: id, new_value: { consultation_id: id, document_type: "referral_letter" } });
+        } else if (capturedDocType === "sick_note") {
           const { downloadSickNote } = await import("@/lib/pdf/generate");
           await downloadSickNote({ ...common, fromDate: cert.from, toDate: cert.to });
+          audit({ action: "download_document_pdf", table_name: "documents", record_id: id, new_value: { consultation_id: id, document_type: "sick_note" } });
         } else {
           const { downloadMedicalCert } = await import("@/lib/pdf/generate");
-          await downloadMedicalCert({ ...common, certType: (docType as "medical_cert"|"insurance_report") ?? "medical_cert", fromDate: cert.from, toDate: cert.to, notes: cert.notes });
+          await downloadMedicalCert({ ...common, certType: (capturedDocType as "medical_cert"|"insurance_report") ?? "medical_cert", fromDate: cert.from, toDate: cert.to, notes: cert.notes });
+          audit({ action: "download_document_pdf", table_name: "documents", record_id: id, new_value: { consultation_id: id, document_type: capturedDocType } });
         }
       };
 
@@ -592,13 +711,42 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
         </div>
       )}
 
+      {consentOnFile === false && (
+        <div className="border-b border-amber-500/35 bg-amber-950/45 px-5 py-3">
+          <div className="mx-auto flex max-w-7xl items-center gap-3">
+            <svg className="h-5 w-5 shrink-0 text-amber-400" viewBox="0 0 24 24" fill="none" aria-hidden>
+              <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <p className="text-sm text-amber-100">
+              No consent record found for this patient. This consultation should not proceed until consent is obtained.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="mx-auto max-w-7xl gap-5 px-5 py-6 lg:grid lg:grid-cols-[1fr_390px]">
 
         {/* LEFT */}
         <div className="min-w-0 space-y-5">
 
           {/* Patient details */}
-          <Card title="Patient details">
+          <Card
+            title="Patient details"
+            flags={
+              consentOnFile === true ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-[#22c55e]/15 px-2.5 py-1 text-xs font-medium text-[#bbf7d0] ring-1 ring-[#22c55e]/30">
+                  <svg className="h-3.5 w-3.5 text-[#86efac]" viewBox="0 0 24 24" fill="none" aria-hidden>
+                    <path d="M20 6 9 17l-5-5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  Consent on file
+                </span>
+              ) : consentOnFile === false ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-medium text-amber-200 ring-1 ring-amber-500/30">
+                  No consent on file
+                </span>
+              ) : null
+            }
+          >
             <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-3">
               <Field label="Full name">{patientName}</Field>
               <Field label="Date of birth">
@@ -782,6 +930,11 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
               <p className="mt-0.5 text-xs text-white/40 capitalize">{consult.service_type.replace(/_/g, " ")} · {consult.service_subtype ?? "—"}</p>
             </div>
             <div className="space-y-3 px-5 py-4">
+              {decisionError && (
+                <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+                  {decisionError}
+                </div>
+              )}
 
               {/* ── DONE state ── */}
               {step === "done" && (
@@ -800,7 +953,13 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
                   {/* Re-download PDF if available */}
                   {redownload && status === "approved" && (
                     <button
-                      onClick={() => redownload()}
+                      onClick={() => {
+                        if (!isValidImcForIssuance(gpImc)) {
+                          setDecisionError("Your IMC number on file is invalid for PDF re-download. Update your profile or contact admin.");
+                          return;
+                        }
+                        void redownload();
+                      }}
                       className="flex w-full items-center justify-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 text-sm font-medium text-white/70 ring-1 ring-white/10 transition-all hover:bg-white/10 hover:text-white">
                       <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
                         <path d="M12 15V3m0 12l-4-4m4 4l4-4M2 17l.621 2.485A2 2 0 004.561 21h14.878a2 2 0 001.94-1.515L22 17" strokeLinecap="round" strokeLinejoin="round"/>
@@ -827,17 +986,36 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
                     <p className="text-xs font-semibold text-amber-300">Unclaimed</p>
                     <p className="mt-0.5 text-xs text-amber-200/60">Review the case details, then claim it to take action. Claiming assigns it to you and removes it from the shared queue.</p>
                   </div>
+                  {!consultationIsPaid(consult.payment_status) && (
+                    <div className="rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-xs text-red-200">
+                      This consultation is not paid. You cannot claim or treat it until payment is confirmed.
+                    </div>
+                  )}
                   <button
                     onClick={async () => {
+                      setDecisionError(null);
+                      if (!consultationIsPaid(consult.payment_status)) {
+                        setDecisionError("Cannot claim until payment is confirmed.");
+                        return;
+                      }
                       const { data: { user } } = await supabase.auth.getUser();
                       if (!user) return;
                       await supabase.from("consultations")
                         .update({ status: "under_review", partner_doctor_id: user.id })
                         .eq("id", id)
                         .eq("status", "pending");
+                      void supabase.from("audit_logs").insert({
+                        actor_id:   user.id,
+                        actor_type: "partner_doctor",
+                        action:     "claim_case",
+                        table_name: "consultations",
+                        record_id:  id,
+                        new_value:  { consultation_id: id },
+                      });
                       setStatus("under_review");
                     }}
-                    className="w-full rounded-xl bg-blue-500/15 px-4 py-3 text-sm font-bold tracking-wide text-blue-200 ring-1 ring-blue-500/30 transition-all hover:bg-blue-500/25">
+                    disabled={!consultationIsPaid(consult.payment_status)}
+                    className="w-full rounded-xl bg-blue-500/15 px-4 py-3 text-sm font-bold tracking-wide text-blue-200 ring-1 ring-blue-500/30 transition-all hover:bg-blue-500/25 disabled:pointer-events-none disabled:opacity-40">
                     Claim this case
                   </button>
                   <Link href="/dashboard/consultations"
@@ -850,24 +1028,31 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
               {/* ── IDLE state — claimed, main action buttons ── */}
               {step === "idle" && (status === "under_review" || status === "more_info_required") && (
                 <>
+                  {!consultationIsPaid(consult.payment_status) && (
+                    <div className="rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-xs text-red-200">
+                      Payment is not confirmed. You can decline this case; issue, approve, and more-information requests are blocked until paid.
+                    </div>
+                  )}
                   {/* Primary: Issue / Approve */}
                   <button
-                    onClick={() => { setDocType(svcConfig.docType); setStep("issuing"); }}
-                    className="w-full rounded-xl bg-[#22c55e]/10 px-4 py-3 text-sm font-bold tracking-wide text-[#86efac] ring-1 ring-[#22c55e]/30 transition-all hover:bg-[#22c55e]/20">
+                    onClick={() => { setDecisionError(null); setDocType(svcConfig.docType); setStep("issuing"); }}
+                    disabled={!consultationIsPaid(consult.payment_status)}
+                    className="w-full rounded-xl bg-[#22c55e]/10 px-4 py-3 text-sm font-bold tracking-wide text-[#86efac] ring-1 ring-[#22c55e]/30 transition-all hover:bg-[#22c55e]/20 disabled:pointer-events-none disabled:opacity-40">
                     ✓ {svcConfig.label}
                   </button>
 
                   {/* Decline */}
                   <button
-                    onClick={() => setStep("decline")}
+                    onClick={() => { setDecisionError(null); setStep("decline"); }}
                     className="w-full rounded-xl bg-red-500/10 px-4 py-3 text-sm font-bold tracking-wide text-red-300 ring-1 ring-red-500/30 transition-all hover:bg-red-500/20">
                     ✕ Decline
                   </button>
 
                   {/* Request more info */}
                   <button
-                    onClick={() => setStep("more_info")}
-                    className="w-full rounded-xl bg-amber-500/10 px-4 py-3 text-sm font-bold tracking-wide text-amber-300 ring-1 ring-amber-500/30 transition-all hover:bg-amber-500/20">
+                    onClick={() => { setDecisionError(null); setStep("more_info"); }}
+                    disabled={!consultationIsPaid(consult.payment_status)}
+                    className="w-full rounded-xl bg-amber-500/10 px-4 py-3 text-sm font-bold tracking-wide text-amber-300 ring-1 ring-amber-500/30 transition-all hover:bg-amber-500/20 disabled:pointer-events-none disabled:opacity-40">
                     ? Request more information
                   </button>
                 </>
@@ -1040,7 +1225,7 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
                   {!consult.video_call_requested && !offerVideo && (
                     <button
                       onClick={() => setOfferVideo(true)}
-                      disabled={status === "pending"}
+                      disabled={status === "pending" || !consultationIsPaid(consult.payment_status)}
                       className="shrink-0 rounded-xl bg-white/5 px-3 py-2 text-xs font-medium text-white/50 ring-1 ring-white/10 transition-all hover:bg-white/10 hover:text-white/80 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       Offer video call
@@ -1049,7 +1234,7 @@ export default function ConsultationPage({ params }: { params: Promise<{ id: str
                   {(consult.video_call_requested || offerVideo) && (
                     <button
                       onClick={startVideoCall}
-                      disabled={videoLoading || status === "pending"}
+                      disabled={videoLoading || status === "pending" || !consultationIsPaid(consult.payment_status)}
                       className="shrink-0 rounded-xl bg-blue-500/15 px-3 py-2 text-xs font-semibold text-blue-200 ring-1 ring-blue-500/25 transition-all hover:bg-blue-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {videoLoading ? "Creating room…" : "Start video call"}

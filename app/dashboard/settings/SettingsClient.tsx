@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase";
 import { logGpAudit } from "@/lib/audit";
-import type { DoctorNotificationPreferences, PartnerDoctor } from "@/types";
+import type { DoctorNotificationPreferences, NotificationDeliveryLog, PartnerDoctor } from "@/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -14,6 +14,7 @@ type Toast = { id: number; message: string; type: "success" | "error" };
 type Props = {
   doctor: PartnerDoctor | null;
   notifPrefs: DoctorNotificationPreferences | null;
+  deliveryLog: NotificationDeliveryLog[];
   userEmail: string;
   lastSignInAt: string | null;
 };
@@ -187,12 +188,19 @@ function ConfigNotifRow({ label, description, checked, onChange }: { label: stri
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function SettingsClient({ doctor, notifPrefs, userEmail, lastSignInAt }: Props) {
+export default function SettingsClient({ doctor, notifPrefs, deliveryLog, userEmail, lastSignInAt }: Props) {
   const supabase = createClient();
   const router = useRouter();
   const toastRef = useRef(0);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [activeTab, setActiveTab] = useState<TabId>("profile");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.location.hash === "#notifications") {
+      setActiveTab("notifications");
+    }
+  }, []);
 
   const toast = useCallback((message: string, type: "success" | "error" = "success") => {
     const id = ++toastRef.current;
@@ -202,35 +210,10 @@ export default function SettingsClient({ doctor, notifPrefs, userEmail, lastSign
 
   const dismissToast = useCallback((id: number) => setToasts((prev) => prev.filter((t) => t.id !== id)), []);
 
-  // ── Profile ────────────────────────────────────────────────────────────────
-  const [firstName, setFirstName] = useState(doctor?.first_name ?? "");
-  const [lastName, setLastName]   = useState(doctor?.last_name  ?? "");
+  // ── Profile (legal name is admin-only; photo optional self-service) ─────────
   const [photoUrl, setPhotoUrl]   = useState(doctor?.profile_photo_url ?? "");
-  const [savingProfile, setSavingProfile]   = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  async function saveProfile() {
-    if (!doctor) return;
-    setSavingProfile(true);
-    const { error } = await supabase
-      .from("partner_doctors")
-      .update({ first_name: firstName.trim(), last_name: lastName.trim() })
-      .eq("id", doctor.id);
-    setSavingProfile(false);
-    if (error) toast("Failed to save profile.", "error");
-    else {
-      await logGpAudit(supabase, {
-        doctorId: doctor.id,
-        action: "gp_profile_updated",
-        tableName: "partner_doctors",
-        recordId: doctor.id,
-        newValue: { first_name: firstName.trim(), last_name: lastName.trim() },
-      });
-      toast("Profile updated successfully.");
-      router.refresh();
-    }
-  }
 
   async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -436,8 +419,10 @@ export default function SettingsClient({ doctor, notifPrefs, userEmail, lastSign
     }
   }
 
-  const initials = firstName && lastName ? `${firstName[0]}${lastName[0]}`.toUpperCase() : "GP";
-  const displayName = firstName || lastName ? `Dr. ${firstName} ${lastName}`.trim() : "Partner GP";
+  const fn = doctor?.first_name ?? "";
+  const ln = doctor?.last_name ?? "";
+  const initials = fn && ln ? `${fn[0]}${ln[0]}`.toUpperCase() : "GP";
+  const displayName = fn || ln ? `Dr. ${fn} ${ln}`.trim() : "Partner GP";
 
   if (!doctor) {
     return (
@@ -507,7 +492,17 @@ export default function SettingsClient({ doctor, notifPrefs, userEmail, lastSign
           <div className="space-y-5">
             <div>
               <h2 className="text-base font-semibold text-white">GP Profile</h2>
-              <p className="mt-1 text-sm text-white/50">Update your name and photo. All other fields are managed by administration.</p>
+              <p className="mt-1 text-sm text-white/50">
+                Your legal name is set when ExpressGP adds your account. You can update your profile photo; all other identity fields are managed by administration.
+              </p>
+              <p className="mt-3 rounded-xl bg-white/[0.03] px-3 py-2.5 text-xs leading-relaxed text-white/45 ring-1 ring-white/10">
+                <strong className="text-white/70">Account status</strong> (below) is admin-controlled: whether your GP login is valid and you may use this dashboard.
+                It is <em>not</em> the same as <strong className="text-white/70">accepting new consultations</strong>, which you control on the{" "}
+                <button type="button" onClick={() => setActiveTab("availability")} className="text-[#86efac] underline underline-offset-2 hover:text-white">
+                  Availability
+                </button>{" "}
+                tab.
+              </p>
             </div>
 
             <div className="rounded-2xl bg-white/[0.04] px-4 py-5 ring-1 ring-white/10">
@@ -587,10 +582,10 @@ export default function SettingsClient({ doctor, notifPrefs, userEmail, lastSign
 
               <div className="grid gap-5 sm:grid-cols-2">
                 <Field label="First name">
-                  <TextInput value={firstName} onChange={setFirstName} placeholder="First name" />
+                  <ReadOnlyField value={doctor.first_name || "—"} />
                 </Field>
                 <Field label="Last name">
-                  <TextInput value={lastName} onChange={setLastName} placeholder="Last name" />
+                  <ReadOnlyField value={doctor.last_name || "—"} />
                 </Field>
                 <Field label="Email address">
                   <ReadOnlyField value={userEmail || doctor?.email || "—"} />
@@ -605,13 +600,16 @@ export default function SettingsClient({ doctor, notifPrefs, userEmail, lastSign
                     : "—"
                   } />
                 </Field>
-                <Field label="Account status">
-                  <ReadOnlyField value={doctor?.is_active ? "Active" : "Inactive"} />
+                <Field label="Account status: Active / Inactive">
+                  <div className="space-y-1.5">
+                    <ReadOnlyField value={doctor?.is_active ? "Active" : "Inactive"} />
+                    <p className="text-[11px] leading-snug text-white/35">
+                      Admin-controlled. Inactive means your account cannot access the GP dashboard, regardless of availability settings.
+                    </p>
+                  </div>
                 </Field>
               </div>
             </div>
-
-            <SaveButton onClick={saveProfile} loading={savingProfile} />
           </div>
         )}
 
@@ -739,6 +737,54 @@ export default function SettingsClient({ doctor, notifPrefs, userEmail, lastSign
                 </p>
               </div>
             </div>
+
+            <div className="rounded-2xl bg-white/[0.04] px-4 py-5 ring-1 ring-white/10">
+              <h3 className="text-sm font-semibold text-white">Recent notification delivery</h3>
+              <p className="mt-1 text-xs text-white/45">
+                Last 20 outbound attempts to you (clinical audit). Channel &quot;sms&quot; includes WhatsApp alerts stored for governance.
+              </p>
+              {deliveryLog.length === 0 ? (
+                <p className="mt-4 text-sm text-white/35">No delivery attempts logged yet.</p>
+              ) : (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full min-w-[480px] text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-white/10 text-xs font-semibold uppercase tracking-wide text-white/40">
+                        <th className="pb-2 pr-3">Type</th>
+                        <th className="pb-2 pr-3">Channel</th>
+                        <th className="pb-2 pr-3">Status</th>
+                        <th className="pb-2">Time</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-white/80">
+                      {deliveryLog.map((row) => (
+                        <tr key={row.id} className="border-b border-white/[0.06]">
+                          <td className="py-2 pr-3 font-mono text-xs">{row.notification_type}</td>
+                          <td className="py-2 pr-3 capitalize">{row.channel}</td>
+                          <td className="py-2 pr-3">
+                            <span
+                              className={[
+                                "rounded-md px-2 py-0.5 text-xs font-medium ring-1",
+                                row.status === "sent"
+                                  ? "bg-[#22c55e]/10 text-[#86efac] ring-[#22c55e]/25"
+                                  : row.status === "failed"
+                                    ? "bg-red-500/10 text-red-300 ring-red-500/25"
+                                    : "bg-amber-500/10 text-amber-200 ring-amber-500/25",
+                              ].join(" ")}
+                            >
+                              {row.status}
+                            </span>
+                          </td>
+                          <td className="py-2 whitespace-nowrap text-xs text-white/55">
+                            {formatDateTime(row.triggered_at)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -750,6 +796,13 @@ export default function SettingsClient({ doctor, notifPrefs, userEmail, lastSign
               <p className="mt-1 text-sm text-white/50">
                 Controls whether you appear in the active GP pool. When you are unavailable, patients are shown a message that the service is operating and they will receive a response by the next working day.
               </p>
+              <div className="mt-3 rounded-xl bg-white/[0.03] px-3 py-2.5 text-xs leading-relaxed text-white/45 ring-1 ring-white/10">
+                <p className="font-semibold text-white/65">Accepting new consultations (your choice)</p>
+                <p className="mt-1">
+                  This is separate from <strong className="text-white/70">account status</strong> on the GP Profile tab: an &quot;active&quot; account can still pause taking new cases here.
+                  Only administrators can deactivate your account entirely.
+                </p>
+              </div>
             </div>
 
             {!isAccepting && (

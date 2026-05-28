@@ -41,30 +41,30 @@ function safeFilename(name: string, ref: string) {
 
 export async function downloadSickNote(d: SickNoteData) {
   const doc  = createElement(SickNotePDF, { d });
-  const blob = await pdf(doc).toBlob();
+  const blob = await pdf(doc as never).toBlob();
   triggerDownload(blob, safeFilename(`SickNote_${d.patientName}`, d.consultationId.slice(0, 8)));
 }
 
 export async function downloadPrescription(d: PrescriptionData) {
   const doc  = createElement(PrescriptionPDF, { d });
-  const blob = await pdf(doc).toBlob();
+  const blob = await pdf(doc as never).toBlob();
   triggerDownload(blob, safeFilename(`Prescription_${d.patientName}`, d.consultationId.slice(0, 8)));
 }
 
 export async function downloadReferral(d: ReferralData) {
   const doc  = createElement(ReferralLetterPDF, { d });
-  const blob = await pdf(doc).toBlob();
+  const blob = await pdf(doc as never).toBlob();
   triggerDownload(blob, safeFilename(`Referral_${d.patientName}`, d.consultationId.slice(0, 8)));
 }
 
 export async function downloadMedicalCert(d: MedicalCertData) {
   const doc  = createElement(MedicalCertPDF, { d });
-  const blob = await pdf(doc).toBlob();
+  const blob = await pdf(doc as never).toBlob();
   triggerDownload(blob, safeFilename(`MedCert_${d.patientName}`, d.consultationId.slice(0, 8)));
 }
 
 export async function downloadDocument(d: GenericDocumentData) {
   const doc  = createElement(GenericDocumentPDF, { d });
-  const blob = await pdf(doc).toBlob();
+  const blob = await pdf(doc as never).toBlob();
   triggerDownload(blob, safeFilename(`${d.typeLabel.replace(/\s+/g, "")}_${d.patientName}`, d.ref));
 }

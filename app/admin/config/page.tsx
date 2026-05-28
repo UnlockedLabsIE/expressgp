@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from "@/lib/supabase-server";
 import PlatformToggles from "./PlatformToggles";
 import { PricingEditor, GPShareEditor } from "./PricingEditor";
 import AdminUsersSection from "./AdminUsersSection";
+import type { ServicePricing } from "@/types";
 
 export const metadata = { title: "Platform Config — Admin" };
 
@@ -11,10 +12,6 @@ type Toggles = {
   accepting_new_patients: boolean;
   accepting_new_gps: boolean;
   maintenance_mode: boolean;
-};
-
-type ServicePricing = Record<string, number> & {
-  glp1_subtypes?: Record<string, number>;
 };
 
 type GPShare = {

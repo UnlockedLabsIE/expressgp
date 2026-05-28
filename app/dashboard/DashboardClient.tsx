@@ -198,7 +198,17 @@ function ConsultationRow({ consult, position }: { consult: ConsultationRow; posi
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function DashboardPage({ consultations, activeCases, isAcceptingCases }: { consultations: ConsultationRow[]; activeCases: ConsultationRow[]; isAcceptingCases: boolean }) {
+export default function DashboardPage({
+  consultations,
+  activeCases,
+  isAcceptingCases,
+  hasRedFlagDeliveryFailure24h,
+}: {
+  consultations: ConsultationRow[];
+  activeCases: ConsultationRow[];
+  isAcceptingCases: boolean;
+  hasRedFlagDeliveryFailure24h: boolean;
+}) {
   const [queueStatus, setQueueStatus] = useState<"awaiting_decision" | "all" | "pending" | "approved" | "declined">("awaiting_decision");
   const [caseType, setCaseType] = useState<"all" | string>("all");
   const [query, setQuery] = useState("");
@@ -243,6 +253,20 @@ export default function DashboardPage({ consultations, activeCases, isAcceptingC
             <a href="/dashboard/settings" className="underline underline-offset-2 hover:text-red-100">
               Change in Settings
             </a>
+          </p>
+        </div>
+      )}
+      {hasRedFlagDeliveryFailure24h && (
+        <div className="flex items-center gap-3 border-b border-amber-500/35 bg-amber-500/10 px-5 py-3">
+          <svg className="h-4 w-4 shrink-0 text-amber-400" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <p className="text-sm text-amber-200">
+            Warning: a red flag notification failed to deliver. Check{" "}
+            <Link href="/dashboard/settings#notifications" className="font-semibold underline underline-offset-2 hover:text-amber-50">
+              Settings → Notifications
+            </Link>
+            .
           </p>
         </div>
       )}

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminSupabaseClient } from "@/lib/supabase-admin";
 import GPAvailabilityToggle from "../GPAvailabilityToggle";
+import GPEditIdentityForm from "./GPEditIdentityForm";
 
 export const metadata = { title: "GP Profile — Admin" };
 
@@ -24,22 +25,31 @@ export default async function AdminGPDetailPage({
 
   try {
     const admin = createAdminSupabaseClient();
-    const [gpRes, consultRes, docRes] = await Promise.all([
-      admin.from("partner_doctors").select("*").eq("id", id).single(),
-      admin.from("consultations")
-        .select("id, status, service_type, created_at, patient:patients(first_name, last_name)")
-        .eq("doctor_id", id)
-        .order("created_at", { ascending: false })
-        .limit(10),
-      admin.from("documents")
-        .select("id, type, ref_number, created_at")
-        .order("created_at", { ascending: false })
-        .limit(10),
-    ]);
+    const gpRes = await admin.from("partner_doctors").select("*").eq("id", id).single();
 
     if (!gpRes.data) notFound();
     gp = gpRes.data;
+
+    const consultRes = await admin
+      .from("consultations")
+      .select("id, status, service_type, created_at, patient:patients(first_name, last_name)")
+      .eq("partner_doctor_id", id)
+      .order("created_at", { ascending: false })
+      .limit(10);
+
     consultations = consultRes.data ?? [];
+
+    const consultIds = consultations.map((c) => String((c as Record<string, unknown>).id ?? ""));
+    const docRes =
+      consultIds.length > 0
+        ? await admin
+            .from("documents")
+            .select("id, type, created_at, consultation_id")
+            .in("consultation_id", consultIds)
+            .order("created_at", { ascending: false })
+            .limit(10)
+        : { data: [] as Record<string, unknown>[] };
+
     documents = docRes.data ?? [];
 
     // ISO 27001 — every access to GP clinical data must be logged
@@ -121,6 +131,22 @@ export default async function AdminGPDetailPage({
           )}
         </div>
 
+        <GPEditIdentityForm
+          key={`${String(gp.email)}-${String(gp.imc_number)}-${String(gp.first_name)}-${String(gp.last_name)}-${String(gp.is_active)}-${String(gp.employment_type ?? "")}`}
+          gpId={String(gp.id)}
+          initial={{
+            first_name: String(gp.first_name ?? ""),
+            last_name: String(gp.last_name ?? ""),
+            email: String(gp.email ?? ""),
+            imc_number: String(gp.imc_number ?? ""),
+            employment_type:
+              gp.employment_type === "employed" || gp.employment_type === "contracted"
+                ? gp.employment_type
+                : "contracted",
+            is_active: Boolean(gp.is_active),
+          }}
+        />
+
         <div className="grid gap-5 lg:grid-cols-2">
           {/* Recent consultations */}
           <section className="rounded-2xl bg-white/5 p-5 ring-1 ring-white/10">
@@ -174,7 +200,9 @@ export default async function AdminGPDetailPage({
                       <p className="truncate text-sm font-medium text-white/80 capitalize">
                         {String(d.type ?? "Document").replace(/_/g, " ")}
                       </p>
-                      <p className="font-mono text-xs text-white/35">{String(d.ref_number ?? "")}</p>
+                      <p className="font-mono text-xs text-white/35">
+                        {String(d.consultation_id ?? "").slice(0, 8).toUpperCase()}
+                      </p>
                     </div>
                     <p className="shrink-0 text-xs text-white/30">
                       {d.created_at ? new Date(String(d.created_at)).toLocaleDateString("en-IE") : ""}

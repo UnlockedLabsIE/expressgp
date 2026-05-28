@@ -18,7 +18,10 @@ export async function createServerSupabaseClient() {
             cookieStore.set(name, value, options),
           );
         } catch {
-          // Server Component — cookie mutation is a no-op, handled by middleware
+          // Server Component — cookie mutation is a no-op here.
+          // Session refresh (token rotation + cookie rewrite) is handled by
+          // `proxy.ts`, which Next.js 16 uses as the middleware entry point
+          // instead of the legacy `middleware.ts` convention.
         }
       },
     },

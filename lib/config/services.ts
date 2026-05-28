@@ -1,11 +1,21 @@
+import type { ServicePricing } from "@/types";
+
 // Master service + subtype config for ExpressGP.
 //
-// Prices come from the `platform_config` table in Supabase (key: "service_pricing").
-// Use `loadServicePricing()` in a server component or API route to get live prices,
-// then pass them into `buildServiceConfig(pricing)`.
+// Pricing is defined in code (see `PRICING` below) and baked into
+// `SERVICE_CONFIG` at module load. This is intentional:
 //
-// The static `SERVICE_CONFIG` export still exists for places that only need
-// labels/slugs/subtypes and don't need prices — e.g. routing and form rendering.
+//   - The `platform_config` table in Supabase is service-role-only
+//     (RLS enabled, zero policies) because it also holds commercially
+//     sensitive config such as `gp_revenue_share`. Reading it with the
+//     anon key from a client or Edge context would either silently
+//     return nothing (today, with RLS closed) or leak sensitive rows
+//     (tomorrow, if anyone loosens the policy to "make prices work").
+//
+//   - If DB-driven pricing is needed in future, implement it via a
+//     server client with the user's session — never the anon key —
+//     and add a narrow RLS policy scoped to `key = 'service_pricing'`
+//     only, or expose a separate, intentionally public table.
 //
 // `value` strings are written into consultations.service_subtype on the database
 // side, so they are stable identifiers — never rename without a migration.
@@ -34,37 +44,11 @@ export type ServiceConfig = {
 
 export type PatientServiceConfig = ServiceConfig & { patient: PatientFacing };
 
-// ── DB price loading ──────────────────────────────────────────────────────────
-
-/** Fetch live pricing from Supabase. Falls back to hardcoded defaults on error. */
-export async function loadServicePricing(): Promise<Record<string, number> & { glp1_subtypes?: Record<string, number> }> {
-  try {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!url || !key) throw new Error("Missing Supabase env vars");
-
-    const res = await fetch(
-      `${url}/rest/v1/platform_config?key=eq.service_pricing&select=value`,
-      {
-        headers: {
-          apikey: key,
-          Authorization: `Bearer ${key}`,
-        },
-        next: { revalidate: 60 }, // Cache for 1 minute — price changes are near-real-time
-      }
-    );
-    if (!res.ok) throw new Error("Supabase fetch failed");
-    const rows = await res.json() as { value: Record<string, number> }[];
-    if (rows[0]?.value) return rows[0].value;
-  } catch {
-    // Fall through to hardcoded defaults
-  }
-  return FALLBACK_PRICING;
-}
-
-// Hardcoded fallback — mirrors the DB seed values.
-// These are only used if Supabase is unreachable.
-const FALLBACK_PRICING: Record<string, number> & { glp1_subtypes?: Record<string, number> } = {
+// ── Pricing — source of truth ────────────────────────────────────────────────
+// In-code pricing. Admin UI writes to `platform_config.service_pricing` for
+// audit/reporting, but the app itself renders from this constant. See the
+// file header for why this is not loaded from the DB on the client.
+const PRICING: ServicePricing = {
   prescription: 20,
   sick_note: 25,
   medical_cert: 25,
@@ -97,13 +81,11 @@ const flat = (
     ...overrides[value],
   }));
 
-// ── Catalogue builder — accepts live prices ───────────────────────────────────
+// ── Catalogue builder ────────────────────────────────────────────────────────
 
-export function buildServiceConfig(
-  pricing: Record<string, number> & { glp1_subtypes?: Record<string, number> } = FALLBACK_PRICING
-): ServiceConfig[] {
-  const p = pricing;
-  const g = p.glp1_subtypes ?? FALLBACK_PRICING.glp1_subtypes!;
+export function buildServiceConfig(): ServiceConfig[] {
+  const p = PRICING;
+  const g = PRICING.glp1_subtypes!;
 
   return [
     {

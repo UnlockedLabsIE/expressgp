@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import type { ServicePricing } from "@/types";
 
-type ServicePricing = Record<string, number>;
 type GPShare = { default_pct: number; premium_pct: number; premium_threshold: number };
 
 const SERVICE_LABELS: Record<string, string> = {
@@ -23,6 +23,17 @@ const GLP1_LABELS: Record<string, string> = {
   dose_adjustment:             "GLP-1 — Dose Adjustment",
   other_glp1:                  "GLP-1 — Other",
 };
+
+const TOP_LEVEL_PRICE_KEYS: (keyof Omit<ServicePricing, "glp1_subtypes">)[] = [
+  "prescription",
+  "sick_note",
+  "medical_cert",
+  "referral",
+  "gp_consultation",
+  "glp1",
+  "insurance_report",
+  "corporate",
+];
 
 function centsToEuros(cents: number) {
   return (cents / 100).toFixed(2);
@@ -93,7 +104,7 @@ function PricingRow({
 export function PricingEditor({
   initialPricing,
 }: {
-  initialPricing: ServicePricing & { glp1_subtypes?: Record<string, number> };
+  initialPricing: ServicePricing;
 }) {
   const [pricing, setPricing] = useState(initialPricing);
   const [saving, setSaving] = useState(false);
@@ -129,12 +140,11 @@ export function PricingEditor({
     }
   }
 
-  const serviceKeys = Object.keys(SERVICE_LABELS);
   const glp1Keys = Object.keys(GLP1_LABELS);
 
   return (
     <div>
-      {serviceKeys.map((k) => (
+      {TOP_LEVEL_PRICE_KEYS.map((k) => (
         <PricingRow
           key={k}
           label={SERVICE_LABELS[k]}

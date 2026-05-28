@@ -17,13 +17,13 @@ export async function GET() {
       .from("admin_users")
       .select("id")
       .eq("id", user.id)
-      .eq("is_active", true)
+      .eq("is_active", true) // admin_users table: staff account active flag (unrelated to partner_doctors.is_active)
       .maybeSingle(),
     admin
       .from("partner_doctors")
       .select("id")
       .eq("id", user.id)
-      .eq("is_active", true)
+      .eq("is_active", true) // partner_doctors.is_active: admin account access (not is_accepting_cases)
       .maybeSingle(),
   ]);
 

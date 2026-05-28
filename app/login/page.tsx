@@ -135,8 +135,14 @@ export default function LoginPage() {
           </Suspense>
         </div>
 
-        <p style={{ marginTop: "28px", fontSize: "12px", color: "rgba(255,255,255,0.18)", textAlign: "center" }}>
-          ExpressGP &mdash; Secure Clinical Platform &mdash; support@expressgp.ie
+        <p style={{ marginTop: "28px", fontSize: "11px", color: "rgba(255,255,255,0.18)", textAlign: "center", lineHeight: 1.7, maxWidth: "380px" }}>
+          ExpressGP Ireland Ltd &mdash; Cork, Ireland &mdash; Data controller under GDPR.
+          <br />
+          <a href="/privacy" style={{ color: "rgba(34,197,94,0.55)", textDecoration: "underline" }}>Privacy Policy</a>
+          {" · "}
+          <a href="mailto:privacy@expressgp.ie" style={{ color: "rgba(34,197,94,0.55)", textDecoration: "underline" }}>privacy@expressgp.ie</a>
+          {" · "}
+          <a href="mailto:support@expressgp.ie" style={{ color: "rgba(255,255,255,0.25)", textDecoration: "underline" }}>support@expressgp.ie</a>
         </p>
       </div>
     </div>

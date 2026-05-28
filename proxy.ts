@@ -40,6 +40,35 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
+  // Authenticated users must be an active partner_doctor to use /dashboard (matches /api/auth/roles).
+  // Admin-only accounts are sent to /admin instead of an empty GP shell.
+  //
+  // partner_doctors.is_active (checked here) = admin-controlled account access: may this user open the
+  // GP dashboard at all? partner_doctors.is_accepting_cases = GP-controlled: are they taking new
+  // pending consultations? A suspended GP (is_active false) is blocked here regardless of accepting flag.
+  if (user && pathname.startsWith("/dashboard")) {
+    const { data: gpRow } = await supabase
+      .from("partner_doctors")
+      .select("id")
+      .eq("id", user.id)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (!gpRow) {
+      const { data: isAdmin } = await supabase.rpc("is_admin", { uid: user.id });
+      if (isAdmin) {
+        const adminUrl = request.nextUrl.clone();
+        adminUrl.pathname = "/admin";
+        return NextResponse.redirect(adminUrl);
+      }
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = "/login";
+      loginUrl.searchParams.set("error", "no_gp_access");
+      loginUrl.searchParams.set("next", pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+  }
+
   // Authenticated user hitting / → send to /login (portal choice handled there)
   if (user && pathname === "/") {
     const loginUrl = request.nextUrl.clone();

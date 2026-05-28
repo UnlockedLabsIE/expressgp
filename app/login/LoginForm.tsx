@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase";
 
@@ -29,6 +29,11 @@ type Step = "form" | "choosing";
 
 export default function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const portalBlock =
+    searchParams.get("error") === "no_gp_access"
+      ? "This account cannot open the GP dashboard. Use the Admin portal if you are an administrator, or sign in with a GP account."
+      : null;
 
   const [step, setStep]         = useState<Step>("form");
   const [email, setEmail]       = useState("");
@@ -156,6 +161,21 @@ export default function LoginForm() {
 
   return (
     <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+      {portalBlock && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: "10px",
+            borderRadius: "12px",
+            border: "1px solid rgba(251,191,36,0.28)",
+            background: "rgba(251,191,36,0.08)",
+            padding: "12px 14px",
+          }}
+        >
+          <p style={{ fontSize: "13px", color: "#fcd34d", margin: 0 }}>{portalBlock}</p>
+        </div>
+      )}
       <div>
         <label htmlFor="email" style={labelStyle}>Email address</label>
         <input
@@ -229,6 +249,13 @@ export default function LoginForm() {
       >
         {loading ? "Signing in…" : "Sign in"}
       </button>
+
+      <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.28)", textAlign: "center", marginTop: "8px", lineHeight: 1.6 }}>
+        By signing in you agree to our{" "}
+        <a href="/privacy" style={{ color: "rgba(34,197,94,0.75)", textDecoration: "underline" }}>Privacy Policy</a>.{" "}
+        ExpressGP Ireland Ltd is the data controller for information processed on this platform.
+        Data queries: <a href="mailto:privacy@expressgp.ie" style={{ color: "rgba(34,197,94,0.75)", textDecoration: "underline" }}>privacy@expressgp.ie</a>
+      </p>
     </form>
   );
 }

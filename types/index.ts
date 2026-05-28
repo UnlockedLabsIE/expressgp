@@ -28,6 +28,19 @@ export type ConsultationStatus =
 
 export type PaymentStatus = "unpaid" | "paid" | "refunded";
 
+/** `platform_config` JSON value for key `service_pricing` (amounts in cents). */
+export type ServicePricing = {
+  prescription: number;
+  sick_note: number;
+  medical_cert: number;
+  referral: number;
+  gp_consultation: number;
+  glp1: number;
+  insurance_report: number;
+  corporate: number;
+  glp1_subtypes?: Record<string, number>;
+};
+
 export type DocumentType =
   | "sick_note"
   | "referral_letter"
@@ -73,8 +86,10 @@ export type PartnerDoctor = {
   email: string;
   imc_number: string;
   employment_type: EmploymentType;
+  /** Admin-controlled: valid active employee/contractor who may access the GP dashboard. Distinct from is_accepting_cases. */
   is_active: boolean;
   // Availability — add_availability_columns.sql
+  /** GP-controlled: whether this clinician is currently accepting new consultations into the queue. Distinct from is_active. */
   is_accepting_cases: boolean;
   out_of_office_until: ISOTimestamp | null;
   // Prescription defaults — add_prescription_defaults.sql
@@ -98,6 +113,30 @@ export type DoctorNotificationPreferences = {
   daily_summary_email: boolean;
   created_at: ISOTimestamp;
   updated_at: ISOTimestamp;
+};
+
+/** Outbound GP notification attempt (clinical governance audit). Channel is email or sms in DB; WhatsApp sends are logged as sms. */
+export type NotificationDeliveryLog = {
+  id: UUID;
+  doctor_id: UUID;
+  notification_type: string;
+  channel: "email" | "sms";
+  triggered_at: ISOTimestamp;
+  delivered_at: ISOTimestamp | null;
+  status: "sent" | "failed" | "pending";
+  consultation_id: UUID | null;
+  error_message: string | null;
+};
+
+/** Immutable patient consent snapshot (GDPR / Medical Council). */
+export type PatientConsent = {
+  id: UUID;
+  patient_id: UUID;
+  consent_version: string;
+  consented_at: ISOTimestamp;
+  /** inet serialized as string from PostgREST */
+  ip_address: string | null;
+  consent_text: string;
 };
 
 export type Company = {

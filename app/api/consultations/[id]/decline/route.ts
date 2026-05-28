@@ -27,6 +27,7 @@ export async function POST(
     .eq("id", user.id)
     .single();
 
+  // is_active = admin-controlled dashboard access (not whether they accept new cases).
   if (!gp?.is_active) {
     return NextResponse.json({ error: "Forbidden — GP account inactive" }, { status: 403 });
   }
@@ -43,7 +44,7 @@ export async function POST(
   // Fetch the consultation to get payment details
   const { data: consultation, error: fetchError } = await admin
     .from("consultations")
-    .select("id, status, payment_status, stripe_payment_id, patient_id")
+    .select("id, status, payment_status, stripe_payment_id, patient_id, partner_doctor_id")
     .eq("id", id)
     .single();
 
@@ -53,6 +54,14 @@ export async function POST(
 
   if (!["pending", "under_review", "more_info_required"].includes(consultation.status)) {
     return NextResponse.json({ error: "Consultation cannot be declined in its current state" }, { status: 409 });
+  }
+
+  const assignee = consultation.partner_doctor_id as string | null;
+  if (assignee && assignee !== user.id) {
+    return NextResponse.json(
+      { error: "Forbidden — only the assigned GP may decline this consultation" },
+      { status: 403 },
+    );
   }
 
   // ── Update consultation status ──────────────────────────────────────────
@@ -85,7 +94,7 @@ export async function POST(
       const stripeKey = process.env.STRIPE_SECRET_KEY;
       if (stripeKey) {
         const Stripe = (await import("stripe")).default;
-        const stripe = new Stripe(stripeKey, { apiVersion: "2025-01-27.acacia" });
+        const stripe = new Stripe(stripeKey, { apiVersion: "2025-02-24.acacia" });
 
         const refund = await stripe.refunds.create({
           payment_intent: consultation.stripe_payment_id,
